@@ -1,26 +1,137 @@
 @import "tailwindcss";
 
+/* Design tokens — light (ivory, green/blue accents from the city's parks & river). */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #f6f3ec;
+  --bg-2: #ece7dc;
+  --surface: rgba(255, 253, 248, 0.88);
+  --surface-solid: #fffdf8;
+  --surface-2: rgba(240, 236, 226, 0.92);
+  --text: #18221d;
+  --muted: #56625b;
+  --border: rgba(24, 40, 32, 0.14);
+  --accent: #17834f;
+  --accent-strong: #0f6b3f;
+  --accent-contrast: #ffffff;
+  --accent-soft: rgba(23, 131, 79, 0.12);
+  --blue: #1f5fd6;
+  --blue-soft: rgba(31, 95, 214, 0.12);
+  --amber: #a15c07;
+  --amber-soft: rgba(161, 92, 7, 0.12);
+  --danger: #b42318;
+  --shadow: 0 10px 30px rgba(30, 40, 30, 0.14), 0 2px 6px rgba(30, 40, 30, 0.08);
+  --focus: #1f5fd6;
+  --sky-top: #9ec9ef;
+  --sky-bottom: #f3ead8;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #0e1311;
+  --bg-2: #141b18;
+  --surface: rgba(20, 27, 24, 0.84);
+  --surface-solid: #161d1a;
+  --surface-2: rgba(30, 38, 35, 0.9);
+  --text: #e8efea;
+  --muted: #a1ada6;
+  --border: rgba(255, 255, 255, 0.13);
+  --accent: #40c987;
+  --accent-strong: #5fd99d;
+  --accent-contrast: #06140d;
+  --accent-soft: rgba(64, 201, 135, 0.16);
+  --blue: #7aa7ff;
+  --blue-soft: rgba(122, 167, 255, 0.16);
+  --amber: #f0b45b;
+  --amber-soft: rgba(240, 180, 91, 0.16);
+  --danger: #ff8a80;
+  --shadow: 0 12px 34px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+  --focus: #7aa7ff;
+  --sky-top: #0b1830;
+  --sky-bottom: #24324a;
+  color-scheme: dark;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg: var(--bg);
+  --color-bg-2: var(--bg-2);
+  --color-surface: var(--surface);
+  --color-surface-solid: var(--surface-solid);
+  --color-surface-2: var(--surface-2);
+  --color-fg: var(--text);
+  --color-muted: var(--muted);
+  --color-line: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-on-accent: var(--accent-contrast);
+  --color-accent-soft: var(--accent-soft);
+  --color-blue: var(--blue);
+  --color-blue-soft: var(--blue-soft);
+  --color-amber: var(--amber);
+  --color-amber-soft: var(--amber-soft);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-be-vietnam), system-ui, sans-serif;
+  --shadow-panel: var(--shadow);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-be-vietnam), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Glass panel used across HUDs. */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  border-radius: 16px;
+}
+
+.kbd {
+  display: inline-flex;
+  min-width: 1.6rem;
+  height: 1.6rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.4rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  background: var(--surface-solid);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+/* Honour reduced motion from OS or user setting. */
+:root[data-reduced-motion="true"] *,
+:root[data-reduced-motion="true"] *::before,
+:root[data-reduced-motion="true"] *::after {
+  animation-duration: 0.001ms !important;
+  transition-duration: 0.001ms !important;
+}
+
+/* drei <Html> labels must not steal pointer events from the canvas unless interactive. */
+.map-label {
+  pointer-events: auto;
+  user-select: none;
 }

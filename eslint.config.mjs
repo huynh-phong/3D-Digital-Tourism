@@ -13,6 +13,12 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    // React Three Fiber mutates THREE objects, refs and scratch vectors inside the
+    // frame loop by design; the React-Compiler immutability rule doesn't model that.
+    files: ["components/map/**", "components/game/**", "components/player/**", "components/guide/**"],
+    rules: { "react-hooks/immutability": "off" },
+  },
 ]);
 
 export default eslintConfig;
