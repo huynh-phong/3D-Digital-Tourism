@@ -6,7 +6,7 @@ import type { Lang } from "@/types";
 
 export type ThemePref = "light" | "dark" | "system";
 export type Quality = "low" | "medium" | "high";
-export type VoiceMode = "cloud" | "browser" | "none";
+export type VoiceMode = "cloud" | "none";
 
 export type Action =
   | "forward"
@@ -112,7 +112,9 @@ export const useSettings = create<SettingsState>()(
       // Older saves may miss newly added key bindings.
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<SettingsState>;
-        return { ...current, ...p, keys: { ...DEFAULT_KEYS, ...(p.keys ?? {}) } };
+        // the browser-voice mode no longer exists: Minh Anh always speaks with the ElevenLabs voice
+        const voiceMode: VoiceMode = (p.voiceMode as string) === "none" ? "none" : "cloud";
+        return { ...current, ...p, voiceMode, keys: { ...DEFAULT_KEYS, ...(p.keys ?? {}) } };
       },
       // Persist data only, not the action functions.
       partialize: (s) => Object.fromEntries(Object.entries(s).filter(([, v]) => typeof v !== "function")) as Partial<SettingsState>,

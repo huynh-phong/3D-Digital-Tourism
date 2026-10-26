@@ -43,7 +43,7 @@ với hướng dẫn viên AI **Minh Anh** dẫn đường, thuyết minh song n
 | 🧭 **Dẫn đường** | Chọn điểm đến (điểm dừng, hiện vật, phòng) → dải sáng bám sàn đi qua cửa và cầu thang hợp lệ, không xuyên tường; khoảng cách và chỉ dẫn rẽ trái/phải/lên/xuống |
 | 👩‍🏫 **Minh Anh dẫn đoàn** | Đi trước 2–4 m, chậm lại và chờ khi bạn tụt lại, nhắc bằng lời (không lặp liên tục), thuyết minh khi bạn đến gần, tạm dừng khi bạn đi xa |
 | 🤖 **Hỏi đáp AI** | Gemini Flash trả lời **chỉ từ kho tư liệu có nguồn**, đúng ngôn ngữ bạn đang gõ, nhớ ngữ cảnh nhiều lượt; thiếu khóa hoặc lỗi thì trả lời trích từ kho (ghi rõ chế độ demo/dự phòng) |
-| 🔊 **Giọng nói ElevenLabs** | Giọng nữ tiếng Việt có biểu cảm (`eleven_v3` + audio tag chọn lọc) và giọng nữ tiếng Anh độ trễ thấp (`eleven_flash_v2_5`), stream theo từng câu; lỗi thì tự lùi về giọng trình duyệt hoặc phụ đề |
+| 🔊 **Một giọng duy nhất** | Minh Anh luôn nói bằng giọng nữ **Matilda** (ElevenLabs): tiếng Việt có biểu cảm (`eleven_v3` + audio tag chọn lọc), tiếng Anh độ trễ thấp (`eleven_flash_v2_5`); stream theo từng câu, lỗi thì thử lại rồi chỉ hiện phụ đề — không bao giờ đổi sang giọng khác |
 | 🌐 **Song ngữ & tiếp cận** | Tiếng Việt / English, giao diện sáng/tối, đổi phím, giảm chuyển động, phụ đề |
 
 ## 📸 Ảnh chụp
@@ -71,7 +71,7 @@ cp .env.example .env    # điền GEMINI_API_KEY và ELEVENLABS_API_KEY
 npm run dev             # http://localhost:3000
 ```
 
-Không có khóa API ứng dụng vẫn chạy (**chế độ demo**): câu trả lời lấy từ kho tư liệu, giọng đọc dùng giọng trình duyệt hoặc phụ đề.
+Không có khóa API ứng dụng vẫn chạy (**chế độ demo**): câu trả lời lấy từ kho tư liệu và hiển thị phụ đề.
 
 | Lệnh | Mô tả |
 |---|---|
@@ -93,11 +93,8 @@ Sao chép `.env.example` thành `.env` (hoặc `.env.local`). Khóa chỉ đư�
 | `AI_PROVIDER` | tự động | Ép chọn `gemini` hoặc `anthropic` |
 | `ANTHROPIC_API_KEY`, `AI_MODEL` | — | Lựa chọn thay thế: Claude |
 | `ELEVENLABS_API_KEY` | — | Giọng nói ElevenLabs (cần quyền *Text to Speech*; quyền *Voices: read* để tra voice ID) |
-| `ELEVENLABS_VOICE_ID_VI` | `XrExE9yKIg1WjnnlVkGX` (Matilda) | Giọng nữ đọc tiếng Việt. Giọng “Trang – Clear, Smooth and Direct” là `BlZK9tHPU6XXjwOSIiYA` (giọng Voice Library, cần gói trả phí khi gọi qua API) |
-| `ELEVENLABS_VOICE_ID_EN` | `EXAVITQu4vr4xnSDxMaL` (Sarah) | Giọng nữ tiếng Anh |
+| `ELEVENLABS_VOICE_ID` | `XrExE9yKIg1WjnnlVkGX` (Matilda) | Giọng duy nhất của Minh Anh cho cả tiếng Việt và tiếng Anh |
 | `ELEVENLABS_MODEL_VI` / `ELEVENLABS_MODEL_EN` | `eleven_v3` / `eleven_flash_v2_5` | Model có audio tag biểu cảm / model độ trễ thấp |
-| `TTS_PROVIDER` | `elevenlabs` | `elevenlabs` · `azure` · `google` |
-| `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION`, `GOOGLE_TTS_API_KEY`, `TTS_VOICE_VI`, `TTS_VOICE_EN` | — | TTS khác (tùy chọn) |
 
 **Luồng hội thoại**
 
@@ -109,7 +106,7 @@ flowchart LR
   T --> N["narrator: tách câu<br/>GET /api/tts"]
   N --> E["ElevenLabs stream<br/>(vi: eleven_v3 + tag, en: flash)"]
   E --> P[Phát từng câu,<br/>câu sau tạo song song]
-  E -. lỗi .-> F[Giọng trình duyệt / phụ đề]
+  E -. lỗi sau khi thử lại .-> F[Chỉ phụ đề cho câu đó]
 ```
 
 - Minh Anh trả lời bằng **ngôn ngữ bạn đang gõ** và chọn giọng tương ứng.
@@ -155,7 +152,7 @@ lib/
   dinh/              palaceModel (hình + collider + đồ thị đi bộ từ một nguồn), route (tìm đường), textures (PBR thủ tục)
   guide/brain.ts     Máy trạng thái của Minh Anh
   tour/              director, navigator, destinations
-  server/            ai.ts (Gemini / Claude), tts.ts (ElevenLabs / Azure / Google), expressive.ts (tag biểu cảm), rateLimit
+  server/            ai.ts (Gemini / Claude), tts.ts (ElevenLabs, giọng Matilda), expressive.ts (tag biểu cảm), rateLimit
   audio/narrator.ts  Phát theo câu, phụ đề đồng bộ, tự hạ cấp giọng đọc
 scripts/fetch-osm.mjs  Tải & tiền xử lý OSM
 tests/               vitest
@@ -205,7 +202,7 @@ npm test
 2. **Settings → Environment Variables**: thêm `GEMINI_API_KEY` (và các biến tùy chọn ở trên).
 3. Deploy. `/api/*` chạy dưới dạng serverless function; `/`, `/dinh-doc-lap`, `/sources` là trang tĩnh.
 
-> ⚠️ Vercel **không đọc file `.env` trên máy bạn**. Hãy thêm `GEMINI_API_KEY`, `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID_VI`, `ELEVENLABS_VOICE_ID_EN` (và các biến model nếu đổi) cho cả môi trường **Production** và **Preview**, rồi Redeploy. Kiểm tra bằng `https://<tên-miền>/api/status`: kết quả đúng là `"tts":"elevenlabs"` và `"voices":{"vi":true,"en":true}` (trang này không bao giờ hiển thị khóa).
+> ⚠️ Vercel **không đọc file `.env` trên máy bạn**. Hãy thêm `GEMINI_API_KEY`, `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` (và các biến model nếu đổi) cho cả môi trường **Production** và **Preview**, rồi Redeploy. Kiểm tra bằng `https://<tên-miền>/api/status`: kết quả đúng là `"tts":"elevenlabs"` và `"voice":"XrExE9yKIg1WjnnlVkGX"` (trang này không bao giờ hiển thị khóa).
 
 Giới hạn tần suất trong `lib/server/rateLimit.ts` là bộ nhớ trong của từng instance; để giới hạn chặt trên nhiều instance, hãy thay bằng kho dùng chung (ví dụ Redis).
 
@@ -230,7 +227,7 @@ Giới hạn tần suất trong `lib/server/rateLimit.ts` là bộ nhớ trong c
 
 - Nhân vật và kiến trúc dựng bằng mã; nên thay bằng mô hình GLB có giấy phép (nhân vật có rig, mô hình Dinh từ bản vẽ đo đạc). Giao diện `HumanoidAnim` và `palaceModel` đã tách sẵn để thay.
 - Chỉ đi được tầng nền, tầng hầm và sân thượng; các tầng lầu “chưa mô hình hóa”. Có lối tắt cầu thang (<kbd>E</kbd>).
-- Gói ElevenLabs Free không cho dùng giọng Voice Library (như “Trang”) qua API, nên tiếng Việt đang dùng giọng nữ Matilda có sẵn trong tài khoản, đọc qua model đa ngôn ngữ. Khi nâng gói, chỉ cần đổi `ELEVENLABS_VOICE_ID_VI`. Gói Free cũng giới hạn số ký tự mỗi tháng; khi hết, ứng dụng tự lùi về giọng trình duyệt.
+- Matilda là giọng gốc tiếng Anh, đọc tiếng Việt qua model đa ngôn ngữ. Giọng Việt “Trang” (`BlZK9tHPU6XXjwOSIiYA`) thuộc Voice Library, gói Free không gọi được qua API; khi nâng gói, chỉ cần đổi `ELEVENLABS_VOICE_ID`. Gói Free giới hạn số ký tự mỗi tháng và số yêu cầu đồng thời (server xếp hàng tối đa 2 yêu cầu và tự thử lại); khi hết hạn mức, câu trả lời chỉ hiện phụ đề.
 - Biểu cảm tiếng Việt được chọn theo luật (từ khóa, dấu câu), chưa phân tích ngữ nghĩa sâu. Hoạt ảnh miệng chưa có lip-sync; nhân vật chỉ chuyển sang hoạt ảnh “nói” khi đang phát tiếng.
 - Chưa có nhập câu hỏi bằng giọng nói (micro).
 - Hiệu năng cần đo thêm trên nhiều cấu hình máy; có 3 mức đồ họa Thấp/Trung bình/Cao.

@@ -20,7 +20,7 @@ export async function GET(req: Request) {
   if (!parsed.success) return Response.json({ error: "invalid_request" }, { status: 400 });
   const { text, lang } = parsed.data;
   try {
-    const body = provider.stream ? await provider.stream(text, lang) : await provider.synthesize(text, lang);
+    const body = await provider.stream(text, lang);
     return new Response(body, { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "private, max-age=86400" } });
   } catch (err) {
     return failure(err);
@@ -31,7 +31,7 @@ export async function GET(req: Request) {
 function failure(err: unknown) {
   const reason = err instanceof TtsError ? err.reason : "upstream";
   console.error("[tts] provider failed:", reason);
-  const status = reason === "voice_not_configured" ? 501 : reason === "rate_limited" || reason === "busy" ? 429 : 502;
+  const status = reason === "voice_not_configured" ? 501 : reason === "rate_limited" ? 429 : 502;
   return Response.json({ error: "tts_failed", reason }, { status });
 }
 

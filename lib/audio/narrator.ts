@@ -5,7 +5,8 @@ import { useSettings } from "@/lib/store/settings";
 import type { Lang } from "@/types";
 
 export type NarratorStatus = "idle" | "loading" | "speaking" | "paused";
-export type Engine = "cloud" | "browser" | "subtitles";
+/** "voice" = Minh Anh's ElevenLabs voice (the only voice); "subtitles" = text only. */
+export type Engine = "voice" | "subtitles";
 
 interface NarratorState {
   status: NarratorStatus;
@@ -15,7 +16,7 @@ interface NarratorState {
   key: string | null; // what is being narrated (e.g. "stop-gate:main")
   sentenceIndex: number;
   sentenceCount: number;
-  notice: string | null; // e.g. "no Vietnamese voice"
+  notice: string | null; // "voice_fallback" when a sentence could not be voiced
 }
 
 export const useNarrator = create<NarratorState>()(() => ({
@@ -40,29 +41,24 @@ export function splitSentences(text: string): string[] {
 /** Subtitle-only pacing: ~15 chars/s at rate 1, minimum 1.6 s. */
 const readingMs = (s: string, rate: number) => Math.max(1600, (s.length / 15) * 1000) / rate;
 
-/** Server voice per language; null = unknown until /api/status answers. */
-let cloudVoices: Record<Lang, boolean> | null = null;
+/** Whether the server has the voice configured; null = unknown until /api/status answers. */
+let voiceAvailable: boolean | null = null;
 if (typeof window !== "undefined") {
   fetch("/api/status")
     .then((r) => r.json())
-    .then((s: { tts: string | null; voices?: Record<Lang, boolean> }) => (cloudVoices = s.voices ?? { vi: !!s.tts, en: !!s.tts }))
+    .then((s: { tts: string | null }) => (voiceAvailable = !!s.tts))
     .catch(() => {});
 }
 
-/** Streaming URL: the server sends MP3 as it is generated, so playback starts early. */
-const ttsUrl = (text: string, lang: Lang) => `/api/tts?lang=${lang}&text=${encodeURIComponent(text)}`;
+/** Streaming URL: the server passes MP3 through as ElevenLabs generates it. */
+const ttsUrl = (text: string, lang: Lang, retry = 0) => `/api/tts?lang=${lang}&text=${encodeURIComponent(text)}${retry ? `&r=${retry}` : ""}`;
 
-function pickBrowserVoice(lang: Lang): SpeechSynthesisVoice | null {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
-  const voices = window.speechSynthesis.getVoices();
-  const prefix = lang === "vi" ? "vi" : "en";
-  const candidates = voices.filter((v) => v.lang.toLowerCase().startsWith(prefix));
-  if (!candidates.length) return null;
-  // Prefer voices whose names suggest a female voice; fall back to any match.
-  const female = /hoai ?my|linh|an\b|female|nữ|zira|jenny|aria|samantha|google (vietnamese|us english)/i;
-  return candidates.find((v) => female.test(v.name)) ?? candidates[0];
-}
-
+/**
+ * Plays narration sentence by sentence with synced subtitles, always in the
+ * same ElevenLabs voice. A new play() stops the previous one (no overlap). If
+ * a sentence can't be voiced even after a retry, that sentence is shown as a
+ * subtitle and the next one tries the voice again — never a different voice.
+ */
 class Narrator {
   private token = 0;
   private audio: HTMLAudioElement | null = null;
@@ -70,30 +66,30 @@ class Narrator {
   private sentences: string[] = [];
   private lang: Lang = "vi";
   private clips = new Map<number, HTMLAudioElement>(); // current + preloaded next sentence
-  private remaining = 0; // subtitle-only timer remainder when paused
+  private remaining = 0; // subtitle timer remainder when paused
   private timerStarted = 0;
+  private silent = false; // the current sentence is subtitle-only
 
   private cleanup() {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.audio = null;
     // stop and drop every clip (also aborts their downloads → the server stops generating)
-    for (const a of this.clips.values()) {
-      a.onended = a.onerror = a.onplaying = null;
-      a.pause();
-      a.removeAttribute("src");
-      a.load();
-    }
+    for (const a of this.clips.values()) this.drop(a);
     this.clips.clear();
-    if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
+  }
+
+  private drop(a: HTMLAudioElement) {
+    a.onended = a.onerror = a.onplaying = null;
+    a.pause();
+    a.removeAttribute("src");
+    a.load();
   }
 
   private chooseEngine(): Engine {
     const s = useSettings.getState();
-    if (!s.voiceEnabled || s.voiceMode === "none") return "subtitles";
-    if (s.voiceMode === "cloud" && (cloudVoices === null || cloudVoices[this.lang])) return "cloud";
-    if (pickBrowserVoice(this.lang)) return "browser";
-    return "subtitles";
+    if (!s.voiceEnabled || s.voiceMode === "none" || voiceAvailable === false) return "subtitles";
+    return "voice";
   }
 
   /** Start narrating; any previous narration is stopped first (no overlap). */
@@ -102,31 +98,24 @@ class Narrator {
     const token = ++this.token;
     this.lang = lang;
     this.sentences = splitSentences(text);
-    const engine = this.chooseEngine();
-    const st = useSettings.getState();
-    const notice =
-      st.voiceEnabled && st.voiceMode === "cloud" && engine !== "cloud" && cloudVoices && !cloudVoices[lang]
-        ? "voice_missing" // e.g. no ElevenLabs voice ID configured for this language
-        : st.voiceEnabled && engine === "subtitles" && st.voiceMode !== "none"
-          ? "no_voice"
-          : null;
-    useNarrator.setState({ key, title, engine, notice, sentenceCount: this.sentences.length, sentenceIndex: 0, subtitle: "" });
+    useNarrator.setState({ key, title, engine: this.chooseEngine(), notice: null, sentenceCount: this.sentences.length, sentenceIndex: 0, subtitle: "" });
     void this.playSentence(0, token);
   }
 
-  private clip(i: number): HTMLAudioElement | null {
+  private clip(i: number, retry = 0): HTMLAudioElement | null {
     if (i >= this.sentences.length) return null;
     let a = this.clips.get(i);
-    if (!a) {
+    if (!a || retry) {
+      if (a) this.drop(a);
       a = new Audio();
       a.preload = "auto";
-      a.src = ttsUrl(this.sentences[i], this.lang);
+      a.src = ttsUrl(this.sentences[i], this.lang, retry);
       this.clips.set(i, a);
     }
     return a;
   }
 
-  private async playSentence(i: number, token: number) {
+  private playSentence(i: number, token: number, retry = 0) {
     if (token !== this.token) return;
     if (i >= this.sentences.length) {
       useNarrator.setState({ status: "idle", subtitle: "", sentenceIndex: this.sentences.length });
@@ -134,85 +123,59 @@ class Narrator {
     }
     const text = this.sentences[i];
     const { volume, rate } = useSettings.getState();
-    const engine = useNarrator.getState().engine;
     useNarrator.setState({ sentenceIndex: i });
+    this.silent = false;
 
-    if (engine === "cloud") {
-      useNarrator.setState({ status: "loading", subtitle: text });
-      const audio = this.clip(i)!;
-      this.clips.get(i - 1)?.removeAttribute("src");
-      this.clips.delete(i - 1);
-      audio.volume = volume;
-      audio.playbackRate = rate;
-      this.audio = audio;
-      // generate the next sentence in parallel, so there is no gap between sentences
-      this.clip(i + 1);
-      audio.onplaying = () => {
-        if (token !== this.token) return;
-        useNarrator.setState({ status: "speaking" });
-      };
-      audio.onended = () => void this.playSentence(i + 1, token);
-      audio.onerror = () => this.fallback(i, token, "cloud");
-      try {
-        await audio.play();
-      } catch (err) {
-        if (token !== this.token) return;
-        if ((err as Error)?.name === "AbortError") return;
-        // NotAllowedError (autoplay blocked) or a failed stream → next engine down
-        this.fallback(i, token, "cloud");
+    if (useNarrator.getState().engine === "subtitles") return this.showSubtitle(i, token);
+
+    useNarrator.setState({ status: "loading", subtitle: text });
+    const audio = this.clip(i, retry)!;
+    const prev = this.clips.get(i - 1);
+    if (prev) this.drop(prev);
+    this.clips.delete(i - 1);
+    audio.volume = volume;
+    audio.playbackRate = rate;
+    this.audio = audio;
+    // generate the next sentence in parallel, so there is no gap between sentences
+    this.clip(i + 1);
+    audio.onplaying = () => {
+      if (token === this.token) useNarrator.setState({ status: "speaking" });
+    };
+    audio.onended = () => this.playSentence(i + 1, token);
+    const failed = () => {
+      if (token !== this.token || this.audio !== audio) return;
+      audio.onerror = null;
+      if (retry === 0) this.playSentence(i, token, 1); // one more try with the same voice
+      else {
+        useNarrator.setState({ notice: "voice_fallback" });
+        this.showSubtitle(i, token);
       }
-      return;
-    }
-
-    if (engine === "browser") {
-      const voice = pickBrowserVoice(this.lang);
-      if (!voice) return this.fallback(i, token, "browser");
-      const u = new SpeechSynthesisUtterance(text);
-      u.voice = voice;
-      u.lang = voice.lang;
-      u.volume = volume;
-      u.rate = rate;
-      u.onend = () => void this.playSentence(i + 1, token);
-      u.onerror = (e) => {
-        if (e.error === "interrupted" || e.error === "canceled") return;
-        this.fallback(i, token, "browser");
-      };
-      useNarrator.setState({ status: "speaking", subtitle: text });
-      window.speechSynthesis.speak(u);
-      return;
-    }
-
-    // Subtitles only.
-    useNarrator.setState({ status: "speaking", subtitle: text });
-    this.remaining = readingMs(text, rate);
-    this.timerStarted = performance.now();
-    this.timer = setTimeout(() => void this.playSentence(i + 1, token), this.remaining);
+    };
+    audio.onerror = failed;
+    audio.play().catch((err: Error) => {
+      if (err?.name !== "AbortError") failed();
+    });
   }
 
-  /**
-   * Audio failed: degrade one level and continue from the same sentence.
-   * `from` is the engine that failed — a second report of the same failure
-   * (error event + rejected play()) must not degrade twice or restart the sentence.
-   */
-  private fallback(i: number, token: number, from?: Engine) {
-    if (token !== this.token) return;
-    const cur = useNarrator.getState().engine;
-    if (from && cur !== from) return;
-    const next: Engine = cur === "cloud" && pickBrowserVoice(this.lang) ? "browser" : "subtitles";
-    useNarrator.setState({ engine: next, notice: cur === "cloud" ? "voice_fallback" : next === "subtitles" ? "no_voice" : null });
-    void this.playSentence(i, token);
+  /** Text only for this sentence (no other voice), then carry on. */
+  private showSubtitle(i: number, token: number) {
+    const { rate } = useSettings.getState();
+    this.silent = true;
+    this.audio = null;
+    useNarrator.setState({ status: "speaking", subtitle: this.sentences[i] });
+    this.remaining = readingMs(this.sentences[i], rate);
+    this.timerStarted = performance.now();
+    this.timer = setTimeout(() => this.playSentence(i + 1, token), this.remaining);
   }
 
   pause() {
     const st = useNarrator.getState();
     if (st.status !== "speaking" && st.status !== "loading") return;
-    if (st.engine === "cloud") this.audio?.pause();
-    else if (st.engine === "browser") window.speechSynthesis.pause();
-    else if (this.timer) {
+    if (this.silent && this.timer) {
       clearTimeout(this.timer);
       this.timer = null;
       this.remaining -= performance.now() - this.timerStarted;
-    }
+    } else this.audio?.pause();
     useNarrator.setState({ status: "paused" });
   }
 
@@ -221,12 +184,10 @@ class Narrator {
     if (st.status !== "paused") return;
     const token = this.token;
     useNarrator.setState({ status: "speaking" });
-    if (st.engine === "cloud") void this.audio?.play();
-    else if (st.engine === "browser") window.speechSynthesis.resume();
-    else {
+    if (this.silent) {
       this.timerStarted = performance.now();
-      this.timer = setTimeout(() => void this.playSentence(st.sentenceIndex + 1, token), Math.max(200, this.remaining));
-    }
+      this.timer = setTimeout(() => this.playSentence(st.sentenceIndex + 1, token), Math.max(200, this.remaining));
+    } else void this.audio?.play();
   }
 
   stop() {

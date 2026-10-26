@@ -73,7 +73,6 @@ export function SettingsBody() {
             onChange={(voiceMode) => s.set({ voiceMode })}
             options={[
               { value: "cloud", label: t.guide.voiceCloud },
-              { value: "browser", label: t.guide.voiceBrowser },
               { value: "none", label: t.guide.voiceNone },
             ]}
           />

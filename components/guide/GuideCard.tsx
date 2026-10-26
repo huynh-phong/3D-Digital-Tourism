@@ -175,9 +175,7 @@ export function GuideCard({ chatRef }: { chatRef: React.RefObject<HTMLInputEleme
             </span>
           </p>
         ) : null}
-        {nar.notice === "no_voice" && voiceEnabled && <p className="mt-1 text-[11px] text-amber">{t.guide.noViVoice}</p>}
         {nar.notice === "voice_fallback" && voiceEnabled && <p className="mt-1 text-[11px] text-amber">{t.guide.voiceFallback}</p>}
-        {nar.notice === "voice_missing" && voiceEnabled && <p className="mt-1 text-[11px] text-amber">{t.guide.voiceMissing}</p>}
       </div>
 
       {awaitingContinue && (
