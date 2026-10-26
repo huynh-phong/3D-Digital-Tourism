@@ -16,7 +16,7 @@ với hướng dẫn viên AI **Minh Anh** dẫn đường, thuyết minh song n
 [![Tests](https://img.shields.io/badge/tests-60%20passing-2ea44f)](#-kiểm-thử)
 [![OSM](https://img.shields.io/badge/data-OpenStreetMap%20ODbL-7EBC6F?logo=openstreetmap&logoColor=fff)](https://www.openstreetmap.org/copyright)
 
-[Tính năng](#-tính-năng) · [Ảnh chụp](#-ảnh-chụp) · [Cài đặt](#-cài-đặt-nhanh) · [Cấu hình AI & giọng nói](#-cấu-hình-ai--giọng-nói) · [Kiến trúc](#-kiến-trúc) · [Triển khai](#-triển-khai) · [Độ chính xác](#-độ-chính-xác-lịch-sử)
+[Tính năng](#-tính-năng) · [Ảnh chụp](#-ảnh-chụp) · [Hướng dẫn viên AI](#-hướng-dẫn-viên-ai-minh-anh) · [Kiến trúc](#-kiến-trúc) · [Độ chính xác](#-độ-chính-xác-lịch-sử)
 
 </div>
 
@@ -58,42 +58,13 @@ với hướng dẫn viên AI **Minh Anh** dẫn đường, thuyết minh song n
 
 <sub>Ảnh chụp từ ứng dụng (chế độ chất lượng thấp/trung bình, trình duyệt headless).</sub>
 
-## 🚀 Cài đặt nhanh
+## 🤖 Hướng dẫn viên AI Minh Anh
 
-**Yêu cầu:** Node.js ≥ 20 (đã kiểm tra trên Node 24) · trình duyệt hỗ trợ WebGL 2.
+Minh Anh vừa là nhân vật trong thế giới 3D, vừa là trợ lý hỏi đáp:
 
-```bash
-git clone https://github.com/huynh-phong/3D-Digital-Tourism.git
-cd 3D-Digital-Tourism
-npm install
-
-cp .env.example .env    # điền GEMINI_API_KEY, AZURE_SPEECH_KEY và AZURE_SPEECH_REGION
-npm run dev             # http://localhost:3000
-```
-
-Không có khóa API ứng dụng vẫn chạy (**chế độ demo**): câu trả lời lấy từ kho tư liệu và hiển thị phụ đề.
-
-| Lệnh | Mô tả |
-|---|---|
-| `npm run dev` | Chạy môi trường phát triển |
-| `npm run build` / `npm start` | Build và chạy production |
-| `npm test` | Kiểm thử (vitest) |
-| `npm run lint` · `npm run typecheck` | ESLint · TypeScript |
-| `npm run data:osm` | Tải lại dữ liệu OSM → `public/data/city.json` (cache ở `scripts/.osm-cache/`) |
-
-## 🔑 Cấu hình AI & giọng nói
-
-Sao chép `.env.example` thành `.env` (hoặc `.env.local`). Khóa chỉ được đọc phía server, không bao giờ gửi xuống trình duyệt. File `.env*` đã được `.gitignore` chặn.
-
-| Biến | Mặc định | Dùng cho |
-|---|---|---|
-| `GEMINI_API_KEY` | — | Hỏi đáp AI bằng Google Gemini (lấy tại [Google AI Studio](https://aistudio.google.com/apikey)) |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | Model chính |
-| `GEMINI_FALLBACK_MODELS` | `gemini-flash-latest` | Model dự phòng khi model chính quá tải / 429 / quá thời gian (phân tách bằng dấu phẩy) |
-| `AI_PROVIDER` | tự động | Ép chọn `gemini` hoặc `anthropic` |
-| `ANTHROPIC_API_KEY`, `AI_MODEL` | — | Lựa chọn thay thế: Claude |
-| `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` | — | Azure AI Speech (tạo dịch vụ *Speech service*, gói Free F0; lấy *KEY 1* và *Region* ở *Keys and Endpoint*) |
-| `AZURE_VOICE_VI`, `AZURE_VOICE_EN` | `vi-VN-HoaiMyNeural`, `en-US-JennyNeural` | Giọng nữ bản xứ cho từng ngôn ngữ |
+- **Trả lời bằng Google Gemini (Flash)**, chỉ dựa trên kho tư liệu đã kiểm chứng của dự án; câu hỏi nằm ngoài kho được trả lời thẳng thắn là chưa có tư liệu. Khi AI quá tải, hệ thống chuyển sang model dự phòng hoặc trích nguyên văn từ kho và ghi rõ điều đó.
+- **Giọng nói bản xứ từ Azure AI Speech**: tiếng Việt bằng giọng nữ HoaiMy, tiếng Anh bằng giọng nữ Jenny, cố định theo ngôn ngữ.
+- **Dẫn đoàn thật sự**: đi trước người chơi, chờ khi bị bỏ lại, nhắc nhở có chừng mực, thuyết minh khi người chơi đến gần và tạm dừng khi họ đi xa.
 
 **Luồng hội thoại**
 
@@ -111,7 +82,7 @@ flowchart LR
 - Minh Anh trả lời bằng **ngôn ngữ bạn đang gõ** và chọn giọng tương ứng.
 - Câu hỏi mới dừng ngay âm thanh cũ, không bao giờ phát chồng.
 - Không lưu hội thoại hay file âm thanh; server chỉ giữ vài câu trong bộ nhớ đệm.
-- `/api/ask` và `/api/tts` có giới hạn tần suất và kiểm tra dữ liệu đầu vào (zod).
+- Khóa API chỉ nằm phía server; `/api/ask` và `/api/tts` có giới hạn tần suất và kiểm tra dữ liệu đầu vào (zod).
 
 ## 🎮 Điều khiển
 
@@ -179,29 +150,13 @@ Next.js 16 giữ trang đã xem trong React `<Activity>`. Khi trang bị ẩn, R
 
 ## 🧪 Kiểm thử
 
-```bash
-npm test
-```
-
-60 kiểm thử (Vitest), gồm:
+Dự án có 60 kiểm thử tự động (Vitest), gồm:
 
 - **Kho tri thức:** toàn vẹn dữ liệu, nguồn, i18n, truy xuất câu trả lời.
 - **Vật lý:** một capsule dùng character controller Rapier đi từ cổng lên sân thượng, xuống tầng hầm, tới các hiện vật theo tuyến đã lập; tường chặn được.
 - **Tìm đường:** từ 7 điểm xuất phát tới mọi điểm đến; tuyến được kiểm tra độc lập là không xuyên vật cản, chỉ đổi tầng qua cầu thang, đi vòng quanh thảm cỏ.
 - **Minh Anh:** dẫn trước, dừng chờ, nhắc có giới hạn, không rung trạng thái, đi tiếp khi bắt kịp, chỉ thuyết minh đúng lúc, không đi khi không có tuyến.
 - **Thành phố:** mặt đường hướng lên, xe không chồng nhau và không kẹt cứng, thuyền luôn trên mặt nước, chim bay trên mái nhà.
-
-## ☁️ Triển khai
-
-**Vercel** (Next.js):
-
-1. Import repository này trên Vercel. Framework được nhận diện là Next.js.
-2. **Settings → Environment Variables**: thêm `GEMINI_API_KEY` (và các biến tùy chọn ở trên).
-3. Deploy. `/api/*` chạy dưới dạng serverless function; `/`, `/dinh-doc-lap`, `/sources` là trang tĩnh.
-
-> ⚠️ Vercel **không đọc file `.env` trên máy bạn**. Hãy thêm `GEMINI_API_KEY`, `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` (và `AZURE_VOICE_VI` / `AZURE_VOICE_EN` nếu đổi giọng) cho cả môi trường **Production** và **Preview**, rồi Redeploy. Kiểm tra bằng `https://<tên-miền>/api/status`: kết quả đúng là `"tts":"azure"` và `"voices":{"vi":"vi-VN-HoaiMyNeural","en":"en-US-JennyNeural"}` (trang này không bao giờ hiển thị khóa).
-
-Giới hạn tần suất trong `lib/server/rateLimit.ts` là bộ nhớ trong của từng instance; để giới hạn chặt trên nhiều instance, hãy thay bằng kho dùng chung (ví dụ Redis).
 
 ## 📚 Độ chính xác lịch sử
 
@@ -224,8 +179,8 @@ Giới hạn tần suất trong `lib/server/rateLimit.ts` là bộ nhớ trong c
 
 - Nhân vật và kiến trúc dựng bằng mã; nên thay bằng mô hình GLB có giấy phép (nhân vật có rig, mô hình Dinh từ bản vẽ đo đạc). Giao diện `HumanoidAnim` và `palaceModel` đã tách sẵn để thay.
 - Chỉ đi được tầng nền, tầng hầm và sân thượng; các tầng lầu “chưa mô hình hóa”. Có lối tắt cầu thang (<kbd>E</kbd>).
-- Azure gói Free F0 giới hạn số ký tự mỗi tháng và số yêu cầu đồng thời (server xếp hàng tối đa 2 yêu cầu và tự thử lại); khi hết hạn mức, câu trả lời chỉ hiện phụ đề. Tiếng Việt chỉ có hai giọng bản xứ (HoaiMy nữ, NamMinh nam).
-- Biểu cảm tiếng Việt được chọn theo luật (từ khóa, dấu câu), chưa phân tích ngữ nghĩa sâu. Hoạt ảnh miệng chưa có lip-sync; nhân vật chỉ chuyển sang hoạt ảnh “nói” khi đang phát tiếng.
+- Giọng nói phụ thuộc hạn mức của dịch vụ Azure; khi hết hạn mức, câu trả lời vẫn hiển thị đầy đủ dưới dạng phụ đề. Tiếng Việt hiện chỉ có hai giọng bản xứ (HoaiMy nữ, NamMinh nam).
+- Hoạt ảnh miệng chưa có lip-sync; nhân vật chỉ chuyển sang hoạt ảnh “nói” khi đang phát tiếng.
 - Chưa có nhập câu hỏi bằng giọng nói (micro).
 - Hiệu năng cần đo thêm trên nhiều cấu hình máy; có 3 mức đồ họa Thấp/Trung bình/Cao.
 
