@@ -4,7 +4,7 @@ import { directSpeech, stripTags } from "./expressive";
 
 /**
  * Text-to-speech: ElevenLabs only, one fixed voice for everything Minh Anh
- * says (Matilda by default), so the guide never changes voice.
+ * says (Sarah by default), so the guide never changes voice.
  *
  * Consistency first: Vietnamese and English use the same model
  * (eleven_flash_v2_5 by default), the same fixed voice settings and seed, and
@@ -16,7 +16,7 @@ import { directSpeech, stripTags } from "./expressive";
  * Rate-limit / overload answers are retried with backoff and requests are
  * queued (the Free plan allows few concurrent requests) instead of failing.
  */
-export const DEFAULT_VOICE_ID = "XrExE9yKIg1WjnnlVkGX"; // Matilda
+export const DEFAULT_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"; // Sarah
 
 /** Error with a short, non-secret reason the route can report. */
 export class TtsError extends Error {
