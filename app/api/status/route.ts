@@ -9,7 +9,7 @@ export async function GET() {
   return Response.json({
     ai: getAiProvider()?.name ?? null,
     tts: tts?.name ?? null,
-    // the one voice Minh Anh speaks with (a public ElevenLabs voice ID, not a secret)
-    voice: tts?.voiceId ?? null,
+    // the voice per language (public voice names / IDs, not secrets)
+    voices: tts?.voices ?? null,
   });
 }

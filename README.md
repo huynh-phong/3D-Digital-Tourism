@@ -12,7 +12,7 @@ với hướng dẫn viên AI **Minh Anh** dẫn đường, thuyết minh song n
 [![Three.js](https://img.shields.io/badge/Three.js-r186-000000?logo=threedotjs)](https://threejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=fff)](https://www.typescriptlang.org)
 [![Gemini](https://img.shields.io/badge/AI-Gemini%20Flash-8E75B2?logo=googlegemini&logoColor=fff)](https://ai.google.dev)
-[![ElevenLabs](https://img.shields.io/badge/voice-ElevenLabs-000000?logo=elevenlabs&logoColor=fff)](https://elevenlabs.io)
+[![Azure Speech](https://img.shields.io/badge/voice-Azure%20AI%20Speech-0078D4?logo=microsoftazure&logoColor=fff)](https://learn.microsoft.com/azure/ai-services/speech-service/)
 [![Tests](https://img.shields.io/badge/tests-64%20passing-2ea44f)](#-kiểm-thử)
 [![OSM](https://img.shields.io/badge/data-OpenStreetMap%20ODbL-7EBC6F?logo=openstreetmap&logoColor=fff)](https://www.openstreetmap.org/copyright)
 
@@ -43,7 +43,7 @@ với hướng dẫn viên AI **Minh Anh** dẫn đường, thuyết minh song n
 | 🧭 **Dẫn đường** | Chọn điểm đến (điểm dừng, hiện vật, phòng) → dải sáng bám sàn đi qua cửa và cầu thang hợp lệ, không xuyên tường; khoảng cách và chỉ dẫn rẽ trái/phải/lên/xuống |
 | 👩‍🏫 **Minh Anh dẫn đoàn** | Đi trước 2–4 m, chậm lại và chờ khi bạn tụt lại, nhắc bằng lời (không lặp liên tục), thuyết minh khi bạn đến gần, tạm dừng khi bạn đi xa |
 | 🤖 **Hỏi đáp AI** | Gemini Flash trả lời **chỉ từ kho tư liệu có nguồn**, đúng ngôn ngữ bạn đang gõ, nhớ ngữ cảnh nhiều lượt; thiếu khóa hoặc lỗi thì trả lời trích từ kho (ghi rõ chế độ demo/dự phòng) |
-| 🔊 **Một giọng duy nhất** | Minh Anh luôn nói bằng giọng nữ **Sarah** (ElevenLabs) với cùng model (`eleven_flash_v2_5`), thông số giọng cố định, seed cố định và nối ngữ cảnh câu trước/sau, nên mọi câu tiếng Việt lẫn tiếng Anh nghe như một người; stream theo từng câu, lỗi thì thử lại rồi chỉ hiện phụ đề — không bao giờ đổi sang giọng khác |
+| 🔊 **Giọng bản xứ** | Minh Anh đọc tiếng Việt bằng giọng nữ **HoaiMy** và tiếng Anh bằng giọng nữ **Jenny** (Azure AI Speech, phát âm chuẩn), cố định theo ngôn ngữ; stream theo từng câu, lỗi thì thử lại rồi chỉ hiện phụ đề. ElevenLabs là lựa chọn thay thế |
 | 🌐 **Song ngữ & tiếp cận** | Tiếng Việt / English, giao diện sáng/tối, đổi phím, giảm chuyển động, phụ đề |
 
 ## 📸 Ảnh chụp
@@ -67,7 +67,7 @@ git clone https://github.com/huynh-phong/3D-Digital-Tourism.git
 cd 3D-Digital-Tourism
 npm install
 
-cp .env.example .env    # điền GEMINI_API_KEY và ELEVENLABS_API_KEY
+cp .env.example .env    # điền GEMINI_API_KEY, AZURE_SPEECH_KEY và AZURE_SPEECH_REGION
 npm run dev             # http://localhost:3000
 ```
 
@@ -92,9 +92,10 @@ Sao chép `.env.example` thành `.env` (hoặc `.env.local`). Khóa chỉ đư�
 | `GEMINI_FALLBACK_MODELS` | `gemini-flash-latest` | Model dự phòng khi model chính quá tải / 429 / quá thời gian (phân tách bằng dấu phẩy) |
 | `AI_PROVIDER` | tự động | Ép chọn `gemini` hoặc `anthropic` |
 | `ANTHROPIC_API_KEY`, `AI_MODEL` | — | Lựa chọn thay thế: Claude |
-| `ELEVENLABS_API_KEY` | — | Giọng nói ElevenLabs (cần quyền *Text to Speech*; quyền *Voices: read* để tra voice ID) |
-| `ELEVENLABS_VOICE_ID` | `EXAVITQu4vr4xnSDxMaL` (Sarah) | Giọng duy nhất của Minh Anh cho cả tiếng Việt và tiếng Anh |
-| `ELEVENLABS_MODEL` | `eleven_flash_v2_5` | Một model cho mọi câu. `eleven_v3` bật tag biểu cảm tiếng Việt nhưng giọng dao động hơn giữa các câu |
+| `TTS_PROVIDER` | `azure` | `azure` (mặc định) hoặc `elevenlabs` |
+| `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` | — | Azure AI Speech (tạo dịch vụ *Speech service*, gói Free F0; lấy *KEY 1* và *Region* ở *Keys and Endpoint*) |
+| `AZURE_VOICE_VI`, `AZURE_VOICE_EN` | `vi-VN-HoaiMyNeural`, `en-US-JennyNeural` | Giọng nữ bản xứ cho từng ngôn ngữ |
+| `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL` | —, Sarah, `eleven_flash_v2_5` | Lựa chọn thay thế: một giọng ElevenLabs cho cả hai ngôn ngữ |
 
 **Luồng hội thoại**
 
@@ -104,7 +105,7 @@ flowchart LR
   A --> G[Gemini Flash<br/>+ model dự phòng]
   G --> T[Chữ hiện ngay<br/>trong thẻ Minh Anh]
   T --> N["narrator: tách câu<br/>GET /api/tts"]
-  N --> E["ElevenLabs stream<br/>(Sarah, flash v2.5,<br/>nối câu trước/sau)"]
+  N --> E["Azure AI Speech stream<br/>(vi: HoaiMy, en: Jenny)"]
   E --> P[Phát từng câu,<br/>câu sau tạo song song]
   E -. lỗi sau khi thử lại .-> F[Chỉ phụ đề cho câu đó]
 ```
@@ -152,7 +153,7 @@ lib/
   dinh/              palaceModel (hình + collider + đồ thị đi bộ từ một nguồn), route (tìm đường), textures (PBR thủ tục)
   guide/brain.ts     Máy trạng thái của Minh Anh
   tour/              director, navigator, destinations
-  server/            ai.ts (Gemini / Claude), tts.ts (ElevenLabs, giọng Sarah), expressive.ts (tag biểu cảm), rateLimit
+  server/            ai.ts (Gemini / Claude), tts.ts (Azure HoaiMy/Jenny, ElevenLabs tùy chọn), expressive.ts (tag biểu cảm), rateLimit
   audio/narrator.ts  Phát theo câu, phụ đề đồng bộ, tự hạ cấp giọng đọc
 scripts/fetch-osm.mjs  Tải & tiền xử lý OSM
 tests/               vitest
@@ -202,7 +203,7 @@ npm test
 2. **Settings → Environment Variables**: thêm `GEMINI_API_KEY` (và các biến tùy chọn ở trên).
 3. Deploy. `/api/*` chạy dưới dạng serverless function; `/`, `/dinh-doc-lap`, `/sources` là trang tĩnh.
 
-> ⚠️ Vercel **không đọc file `.env` trên máy bạn**. Hãy thêm `GEMINI_API_KEY`, `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` (và các biến model nếu đổi) cho cả môi trường **Production** và **Preview**, rồi Redeploy. Kiểm tra bằng `https://<tên-miền>/api/status`: kết quả đúng là `"tts":"elevenlabs"` và `"voice":"EXAVITQu4vr4xnSDxMaL"` (trang này không bao giờ hiển thị khóa).
+> ⚠️ Vercel **không đọc file `.env` trên máy bạn**. Hãy thêm `GEMINI_API_KEY`, `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION`, `TTS_PROVIDER=azure` (và các biến giọng nếu đổi) cho cả môi trường **Production** và **Preview**, rồi Redeploy. Kiểm tra bằng `https://<tên-miền>/api/status`: kết quả đúng là `"tts":"azure"` và `"voices":{"vi":"vi-VN-HoaiMyNeural","en":"en-US-JennyNeural"}` (trang này không bao giờ hiển thị khóa).
 
 Giới hạn tần suất trong `lib/server/rateLimit.ts` là bộ nhớ trong của từng instance; để giới hạn chặt trên nhiều instance, hãy thay bằng kho dùng chung (ví dụ Redis).
 
@@ -227,7 +228,7 @@ Giới hạn tần suất trong `lib/server/rateLimit.ts` là bộ nhớ trong c
 
 - Nhân vật và kiến trúc dựng bằng mã; nên thay bằng mô hình GLB có giấy phép (nhân vật có rig, mô hình Dinh từ bản vẽ đo đạc). Giao diện `HumanoidAnim` và `palaceModel` đã tách sẵn để thay.
 - Chỉ đi được tầng nền, tầng hầm và sân thượng; các tầng lầu “chưa mô hình hóa”. Có lối tắt cầu thang (<kbd>E</kbd>).
-- Sarah là giọng gốc tiếng Anh, đọc tiếng Việt qua model đa ngôn ngữ. Giọng Việt “Trang” (`BlZK9tHPU6XXjwOSIiYA`) thuộc Voice Library, gói Free không gọi được qua API; khi nâng gói, chỉ cần đổi `ELEVENLABS_VOICE_ID`. Gói Free giới hạn số ký tự mỗi tháng và số yêu cầu đồng thời (server xếp hàng tối đa 2 yêu cầu và tự thử lại); khi hết hạn mức, câu trả lời chỉ hiện phụ đề.
+- Azure gói Free F0 giới hạn số ký tự mỗi tháng và số yêu cầu đồng thời (server xếp hàng tối đa 2 yêu cầu và tự thử lại); khi hết hạn mức, câu trả lời chỉ hiện phụ đề. Tiếng Việt chỉ có hai giọng bản xứ (HoaiMy nữ, NamMinh nam). Tag biểu cảm chỉ áp dụng khi dùng ElevenLabs `eleven_v3`.
 - Biểu cảm tiếng Việt được chọn theo luật (từ khóa, dấu câu), chưa phân tích ngữ nghĩa sâu. Hoạt ảnh miệng chưa có lip-sync; nhân vật chỉ chuyển sang hoạt ảnh “nói” khi đang phát tiếng.
 - Chưa có nhập câu hỏi bằng giọng nói (micro).
 - Hiệu năng cần đo thêm trên nhiều cấu hình máy; có 3 mức đồ họa Thấp/Trung bình/Cao.
@@ -236,7 +237,7 @@ Giới hạn tần suất trong `lib/server/rateLimit.ts` là bộ nhớ trong c
 
 - Dữ liệu bản đồ © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), giấy phép ODbL 1.0.
 - Tư liệu lịch sử và kiến trúc: [Di tích lịch sử Dinh Độc Lập — dinhdoclap.gov.vn](https://dinhdoclap.gov.vn).
-- Giọng đọc: [ElevenLabs](https://elevenlabs.io) Text to Speech API.
+- Giọng đọc: [Azure AI Speech](https://learn.microsoft.com/azure/ai-services/speech-service/) (HoaiMy, Jenny); tùy chọn [ElevenLabs](https://elevenlabs.io).
 - AI: [Google Gemini API](https://ai.google.dev).
 
 Danh mục đầy đủ tài sản và giấy phép nằm trong `data/assets.ts` và trang `/sources`.
