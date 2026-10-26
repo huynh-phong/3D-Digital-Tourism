@@ -93,7 +93,7 @@ Sao chép `.env.example` thành `.env` (hoặc `.env.local`). Khóa chỉ đư�
 | `AI_PROVIDER` | tự động | Ép chọn `gemini` hoặc `anthropic` |
 | `ANTHROPIC_API_KEY`, `AI_MODEL` | — | Lựa chọn thay thế: Claude |
 | `ELEVENLABS_API_KEY` | — | Giọng nói ElevenLabs (cần quyền *Text to Speech*; quyền *Voices: read* để tra voice ID) |
-| `ELEVENLABS_VOICE_ID_VI` | `Xb7hH8MSUJpSbSDYk0k2` (Alice) | Giọng nữ đọc tiếng Việt. Giọng “Trang – Clear, Smooth and Direct” là `BlZK9tHPU6XXjwOSIiYA` (giọng Voice Library, cần gói trả phí khi gọi qua API) |
+| `ELEVENLABS_VOICE_ID_VI` | `XrExE9yKIg1WjnnlVkGX` (Matilda) | Giọng nữ đọc tiếng Việt. Giọng “Trang – Clear, Smooth and Direct” là `BlZK9tHPU6XXjwOSIiYA` (giọng Voice Library, cần gói trả phí khi gọi qua API) |
 | `ELEVENLABS_VOICE_ID_EN` | `EXAVITQu4vr4xnSDxMaL` (Sarah) | Giọng nữ tiếng Anh |
 | `ELEVENLABS_MODEL_VI` / `ELEVENLABS_MODEL_EN` | `eleven_v3` / `eleven_flash_v2_5` | Model có audio tag biểu cảm / model độ trễ thấp |
 | `TTS_PROVIDER` | `elevenlabs` | `elevenlabs` · `azure` · `google` |
@@ -230,7 +230,7 @@ Giới hạn tần suất trong `lib/server/rateLimit.ts` là bộ nhớ trong c
 
 - Nhân vật và kiến trúc dựng bằng mã; nên thay bằng mô hình GLB có giấy phép (nhân vật có rig, mô hình Dinh từ bản vẽ đo đạc). Giao diện `HumanoidAnim` và `palaceModel` đã tách sẵn để thay.
 - Chỉ đi được tầng nền, tầng hầm và sân thượng; các tầng lầu “chưa mô hình hóa”. Có lối tắt cầu thang (<kbd>E</kbd>).
-- Gói ElevenLabs Free không cho dùng giọng Voice Library (như “Trang”) qua API, nên tiếng Việt đang dùng giọng nữ Alice có sẵn trong tài khoản, đọc qua model đa ngôn ngữ. Khi nâng gói, chỉ cần đổi `ELEVENLABS_VOICE_ID_VI`. Gói Free cũng giới hạn số ký tự mỗi tháng; khi hết, ứng dụng tự lùi về giọng trình duyệt.
+- Gói ElevenLabs Free không cho dùng giọng Voice Library (như “Trang”) qua API, nên tiếng Việt đang dùng giọng nữ Matilda có sẵn trong tài khoản, đọc qua model đa ngôn ngữ. Khi nâng gói, chỉ cần đổi `ELEVENLABS_VOICE_ID_VI`. Gói Free cũng giới hạn số ký tự mỗi tháng; khi hết, ứng dụng tự lùi về giọng trình duyệt.
 - Biểu cảm tiếng Việt được chọn theo luật (từ khóa, dấu câu), chưa phân tích ngữ nghĩa sâu. Hoạt ảnh miệng chưa có lip-sync; nhân vật chỉ chuyển sang hoạt ảnh “nói” khi đang phát tiếng.
 - Chưa có nhập câu hỏi bằng giọng nói (micro).
 - Hiệu năng cần đo thêm trên nhiều cấu hình máy; có 3 mức đồ họa Thấp/Trung bình/Cao.
