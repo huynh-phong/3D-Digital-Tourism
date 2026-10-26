@@ -7,6 +7,27 @@ const Body = z.object({
   lang: z.enum(["vi", "en"]),
 });
 
+/**
+ * GET /api/tts?lang=vi&text=… streams MP3 so an <audio> element can start
+ * playing while the rest is still being generated. POST returns the whole file.
+ */
+export async function GET(req: Request) {
+  const provider = getTtsProvider();
+  if (!provider) return Response.json({ error: "tts_not_configured" }, { status: 501 });
+  if (!rateLimit("tts:" + clientKey(req), 40, 1)) return Response.json({ error: "rate_limited" }, { status: 429 });
+  const q = new URL(req.url).searchParams;
+  const parsed = Body.safeParse({ text: q.get("text") ?? "", lang: q.get("lang") });
+  if (!parsed.success) return Response.json({ error: "invalid_request" }, { status: 400 });
+  const { text, lang } = parsed.data;
+  try {
+    const body = provider.stream ? await provider.stream(text, lang) : await provider.synthesize(text, lang);
+    return new Response(body, { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "private, max-age=86400" } });
+  } catch (err) {
+    console.error("[tts] provider failed:", err instanceof Error ? err.message : err);
+    return Response.json({ error: "tts_failed" }, { status: 502 });
+  }
+}
+
 export async function POST(req: Request) {
   const provider = getTtsProvider();
   if (!provider) return Response.json({ error: "tts_not_configured" }, { status: 501 });

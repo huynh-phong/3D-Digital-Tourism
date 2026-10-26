@@ -41,3 +41,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 scripts/.osm-cache/
+
+# python (edge-tts helper)
+.venv/
+__pycache__/

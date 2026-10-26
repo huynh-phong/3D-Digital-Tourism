@@ -7,7 +7,8 @@ import { FACT_BY_ID } from "@/data/dinh/sources";
 import { narrator } from "@/lib/audio/narrator";
 import { loc, useLang, useT } from "@/lib/i18n";
 import { useGame } from "@/lib/store/game";
-import { playStop, takeStairs } from "@/lib/tour/director";
+import { navigateTo, playStop, takeStairs } from "@/lib/tour/director";
+import { destKey } from "@/lib/tour/destinations";
 import { Icon } from "@/components/ui/Icon";
 import { Button, IconButton, StatusBadge } from "@/components/ui/primitives";
 import Link from "next/link";
@@ -85,8 +86,9 @@ export function InfoPanel() {
       <>
         <div className="mb-2"><StatusBadge status={i.confidence_status} /></div>
         <p className="text-[13.5px] leading-relaxed">{loc(i.body, lang)}</p>
-        <div className="mt-3">
+        <div className="mt-3 flex flex-wrap gap-2">
           <Button size="sm" icon="volume" onClick={() => narrator?.play(loc(i.body, lang), lang, `i:${i.id}`, loc(i.title, lang))}>{t.tour.replay}</Button>
+          <Button size="sm" icon="map" onClick={() => { navigateTo(destKey("interactable", i.id)); close(); }}>{t.nav.directions}</Button>
         </div>
         <Sources urls={k?.source_urls ?? []} />
       </>

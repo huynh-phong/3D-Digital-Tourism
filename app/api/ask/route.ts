@@ -3,6 +3,7 @@ import { TOUR_STOPS } from "@/data/dinh/tour";
 import { composeOfflineAnswer, detectIntent, retrieve } from "@/lib/knowledge/retrieve";
 import { getAiProvider } from "@/lib/server/ai";
 import { clientKey, rateLimit } from "@/lib/server/rateLimit";
+import { questionLang } from "@/lib/knowledge/lang";
 
 const stopIds = TOUR_STOPS.map((s) => s.id) as [string, ...string[]];
 
@@ -28,6 +29,9 @@ export async function POST(req: Request) {
     return Response.json({ error: "invalid_request" }, { status: 400 });
   }
 
+  // answer in the language the visitor typed in (UI language when unclear); the client picks the voice from it
+  const lang = questionLang(body.question, body.lang);
+  body.lang = lang;
   const ctx = { currentStopId: body.currentStopId, nextStopId: body.nextStopId };
   const offline = composeOfflineAnswer(body.question, body.lang, ctx);
   const intent = detectIntent(body.question);
@@ -38,6 +42,7 @@ export async function POST(req: Request) {
     return Response.json({
       answer: offline.answer,
       mode: provider ? "ai" : "demo",
+      lang,
       sources: offline.entries.flatMap((e) => e.source_urls),
       entries: offline.entries.map((e) => e.id),
     });
@@ -50,6 +55,7 @@ export async function POST(req: Request) {
     return Response.json({
       answer,
       mode: "ai",
+      lang,
       sources: [...new Set(entries.flatMap((e) => e.source_urls))],
       entries: entries.map((e) => e.id),
     });
@@ -59,6 +65,7 @@ export async function POST(req: Request) {
     return Response.json({
       answer: offline.answer,
       mode: "fallback",
+      lang,
       sources: offline.entries.flatMap((e) => e.source_urls),
       entries: offline.entries.map((e) => e.id),
     });

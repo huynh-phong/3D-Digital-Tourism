@@ -1,109 +1,249 @@
-# Sài Gòn 3D — Hành trình khám phá di sản
-### Saigon 3D — Immersive Heritage Explorer
+<div align="center">
 
-Bản đồ Sài Gòn 3D dựng từ dữ liệu OpenStreetMap thật, và một chuyến tham quan **Dinh Độc Lập** có thể đi bộ, với hướng dẫn viên AI **Minh Anh** — một NPC thật sự trong thế giới 3D, thuyết minh song ngữ có phụ đề, giọng nói và hỏi đáp dựa trên tư liệu đã kiểm chứng.
+# 🏛️ Sài Gòn 3D — Du lịch số di sản
 
-> MVP: chỉ Dinh Độc Lập được đầu tư hoàn chỉnh. Các địa điểm khác trên bản đồ ở trạng thái “Sắp ra mắt”.
+**Saigon 3D — Immersive Heritage Explorer**
+
+Bản đồ Sài Gòn 3D dựng từ dữ liệu OpenStreetMap thật, và chuyến tham quan **Dinh Độc Lập** có thể đi bộ,
+với hướng dẫn viên AI **Minh Anh** dẫn đường, thuyết minh song ngữ và trả lời câu hỏi dựa trên tư liệu đã kiểm chứng.
+
+[![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs)](https://nextjs.org)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=000)](https://react.dev)
+[![Three.js](https://img.shields.io/badge/Three.js-r186-000000?logo=threedotjs)](https://threejs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=fff)](https://www.typescriptlang.org)
+[![Gemini](https://img.shields.io/badge/AI-Gemini%20Flash-8E75B2?logo=googlegemini&logoColor=fff)](https://ai.google.dev)
+[![Tests](https://img.shields.io/badge/tests-60%20passing-2ea44f)](#-kiểm-thử)
+[![OSM](https://img.shields.io/badge/data-OpenStreetMap%20ODbL-7EBC6F?logo=openstreetmap&logoColor=fff)](https://www.openstreetmap.org/copyright)
+
+[Tính năng](#-tính-năng) · [Ảnh chụp](#-ảnh-chụp) · [Cài đặt](#-cài-đặt-nhanh) · [Cấu hình AI & giọng nói](#-cấu-hình-ai--giọng-nói) · [Kiến trúc](#-kiến-trúc) · [Triển khai](#-triển-khai) · [Độ chính xác](#-độ-chính-xác-lịch-sử)
+
+</div>
 
 ---
 
-## Chạy dự án
+## 📖 Giới thiệu
+
+**Sài Gòn 3D** là ứng dụng web du lịch số cho di sản TP. Hồ Chí Minh:
+
+- **Bản đồ thành phố 3D** khu trung tâm (Quận 1) dựng tự động từ OpenStreetMap: đường phố, sông Sài Gòn, kênh Bến Nghé, công viên và khoảng 2.400 công trình, cùng xe cộ, thuyền, người đi bộ và chim được mô phỏng.
+- **Dinh Độc Lập đi bộ được**: khuôn viên, mặt tiền với rèm hoa đá, đại sảnh, Phòng Trình Quốc thư, Phòng họp Nội các, tầng hầm và sân thượng, có va chạm vật lý.
+- **Minh Anh, hướng dẫn viên AI** là một nhân vật trong thế giới 3D: đi trước dẫn đường, dừng chờ khi bạn tụt lại, thuyết minh có phụ đề và giọng nữ tiếng Việt/Anh, và trả lời câu hỏi bằng Gemini dựa trên kho tư liệu có nguồn.
+
+> **Trạng thái:** MVP. Dinh Độc Lập là điểm được đầu tư hoàn chỉnh; các địa danh khác trên bản đồ ở trạng thái “Sắp ra mắt”.
+
+## ✨ Tính năng
+
+| | |
+|---|---|
+| 🗺️ **Bản đồ 3D từ dữ liệu thật** | Hình học đường, sông, công viên, công trình từ OSM; kiến trúc sinh tự động theo diện tích/chiều cao; dựng trong Web Worker |
+| 🚦 **Thành phố sống động** | 8 loại xe chạy theo chiều `oneway` thật, dừng đèn đỏ ở giao lộ; tàu thuyền trên sông và kênh; người đi bộ, chó, mèo, chim; 3 mức chất lượng và LOD |
+| 🏛️ **Dinh Độc Lập chi tiết** | Texture PBR sinh bằng mã, rèm hoa đá dựng bằng hình học thật, nội thất các phòng theo ảnh chính thức, ánh sáng dịu dần khi vào/ra nhà |
+| 🚶 **Điều khiển kiểu game** | WASD, chạy, nhảy, góc nhìn thứ nhất/thứ ba; khóa chuột (Pointer Lock); dáng đi khớp vận tốc, chân không trượt; hỗ trợ cảm ứng |
+| 🧭 **Dẫn đường** | Chọn điểm đến (điểm dừng, hiện vật, phòng) → dải sáng bám sàn đi qua cửa và cầu thang hợp lệ, không xuyên tường; khoảng cách và chỉ dẫn rẽ trái/phải/lên/xuống |
+| 👩‍🏫 **Minh Anh dẫn đoàn** | Đi trước 2–4 m, chậm lại và chờ khi bạn tụt lại, nhắc bằng lời (không lặp liên tục), thuyết minh khi bạn đến gần, tạm dừng khi bạn đi xa |
+| 🤖 **Hỏi đáp AI** | Gemini Flash trả lời **chỉ từ kho tư liệu có nguồn**, đúng ngôn ngữ bạn đang gõ, nhớ ngữ cảnh nhiều lượt; thiếu khóa hoặc lỗi thì trả lời trích từ kho (ghi rõ chế độ demo/dự phòng) |
+| 🔊 **Giọng nữ miễn phí** | `edge-tts` (vi-VN-HoaiMyNeural, en-US-JennyNeural), stream theo từng câu; lỗi thì tự lùi về giọng trình duyệt hoặc phụ đề |
+| 🌐 **Song ngữ & tiếp cận** | Tiếng Việt / English, giao diện sáng/tối, đổi phím, giảm chuyển động, phụ đề |
+
+## 📸 Ảnh chụp
+
+| Mặt tiền và rèm hoa đá | Minh Anh thuyết minh ở cổng |
+|---|---|
+| ![Mặt tiền Dinh Độc Lập](docs/screenshots/palace-facade.png) | ![Minh Anh thuyết minh](docs/screenshots/guide-explaining.jpg) |
+| **Dải dẫn đường trên đường vòng** | **Phòng Trình Quốc thư** |
+| ![Dẫn đường](docs/screenshots/route-guidance.jpg) | ![Phòng Trình Quốc thư](docs/screenshots/credentials-room.jpg) |
+| **Phòng họp Hội đồng Nội các** | |
+| ![Phòng họp Nội các](docs/screenshots/cabinet-room.jpg) | |
+
+<sub>Ảnh chụp từ ứng dụng (chế độ chất lượng thấp/trung bình, trình duyệt headless).</sub>
+
+## 🚀 Cài đặt nhanh
+
+**Yêu cầu:** Node.js ≥ 20 (đã kiểm tra trên Node 24) · Python ≥ 3.9 (chỉ cần cho giọng đọc `edge-tts`) · trình duyệt hỗ trợ WebGL 2.
 
 ```bash
+git clone https://github.com/huynh-phong/3D-Digital-Tourism.git
+cd 3D-Digital-Tourism
 npm install
-npm run dev          # http://localhost:3000
-npm test             # kiểm thử nội dung + mô phỏng vật lý Rapier
-npm run lint
-npm run build        # build production
+
+# Giọng đọc miễn phí (tùy chọn)
+python -m venv .venv
+.venv/Scripts/pip install -r requirements.txt      # Windows
+# .venv/bin/pip install -r requirements.txt        # macOS / Linux
+
+cp .env.example .env    # điền GEMINI_API_KEY nếu muốn AI trả lời
+npm run dev             # http://localhost:3000
 ```
 
-Node.js ≥ 20 (đã kiểm tra trên Node 24). Không cần khóa API: thiếu khóa thì ứng dụng chạy **chế độ demo** — trả lời từ kho tư liệu, đọc bằng giọng của trình duyệt (nếu có giọng tiếng Việt) hoặc hiển thị phụ đề.
+Không có khóa API ứng dụng vẫn chạy (**chế độ demo**): câu trả lời lấy từ kho tư liệu, giọng đọc dùng edge-tts nếu đã cài Python, nếu không thì dùng giọng trình duyệt hoặc phụ đề.
 
-### Biến môi trường (`.env.local`, xem `.env.example`)
-
-| Biến | Dùng cho |
+| Lệnh | Mô tả |
 |---|---|
-| `ANTHROPIC_API_KEY`, `AI_MODEL` | Hỏi đáp AI (mặc định `claude-opus-5-5`), chỉ gọi phía server |
-| `TTS_PROVIDER`, `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` | Giọng đọc Azure (mặc định `vi-VN-HoaiMyNeural`) |
-| `GOOGLE_TTS_API_KEY` | Giọng đọc Google Cloud (tự chọn giọng nữ vi-VN) |
-| `TTS_VOICE_VI`, `TTS_VOICE_EN` | Ghi đè tên giọng |
+| `npm run dev` | Chạy môi trường phát triển |
+| `npm run build` / `npm start` | Build và chạy production |
+| `npm test` | Kiểm thử (vitest) |
+| `npm run lint` · `npm run typecheck` | ESLint · TypeScript |
+| `npm run data:osm` | Tải lại dữ liệu OSM → `public/data/city.json` (cache ở `scripts/.osm-cache/`) |
 
-Tên giọng thay đổi theo thời gian — hãy đối chiếu danh sách giọng hiện hành của nhà cung cấp khi triển khai.
+## 🔑 Cấu hình AI & giọng nói
 
-## Triển khai lên Vercel
+Sao chép `.env.example` thành `.env` (hoặc `.env.local`). Khóa chỉ được đọc phía server, không bao giờ gửi xuống trình duyệt. File `.env*` đã được `.gitignore` chặn.
 
-1. Đẩy thư mục `saigon3d/` lên một repository GitHub (hoặc đặt **Root Directory** = `saigon3d` khi import).
-2. Vercel → **Add New Project** → chọn repository. Framework được nhận diện là Next.js; giữ lệnh build mặc định `next build`.
-3. **Settings → Environment Variables**: thêm các biến ở bảng trên (tùy chọn). Không đặt khóa trong mã frontend.
-4. Deploy. Các route `/api/ask`, `/api/tts`, `/api/status` chạy dưới dạng serverless function; `/`, `/dinh-doc-lap`, `/sources` là trang tĩnh.
+| Biến | Mặc định | Dùng cho |
+|---|---|---|
+| `GEMINI_API_KEY` | — | Hỏi đáp AI bằng Google Gemini (lấy tại [Google AI Studio](https://aistudio.google.com/apikey)) |
+| `GEMINI_MODEL` | `gemini-2.5-flash` | Model chính |
+| `GEMINI_FALLBACK_MODELS` | `gemini-flash-latest` | Model dự phòng khi model chính quá tải / 429 / quá thời gian (phân tách bằng dấu phẩy) |
+| `AI_PROVIDER` | tự động | Ép chọn `gemini` hoặc `anthropic` |
+| `ANTHROPIC_API_KEY`, `AI_MODEL` | — | Lựa chọn thay thế: Claude |
+| `TTS_PROVIDER` | `edge` | `edge` (miễn phí, không cần khóa) · `azure` · `google` |
+| `EDGE_TTS_PYTHON` | `./.venv` | Đường dẫn Python đã cài `edge-tts` |
+| `TTS_VOICE_VI`, `TTS_VOICE_EN` | `vi-VN-HoaiMyNeural`, `en-US-JennyNeural` | Giọng đọc (kiểm tra bằng `.venv/Scripts/edge-tts --list-voices`) |
+| `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION`, `GOOGLE_TTS_API_KEY` | — | TTS trả phí (tùy chọn) |
 
-Ghi chú serverless: giới hạn tần suất trong `lib/server/rateLimit.ts` chỉ là bộ nhớ trong của từng instance (chặn spam theo đợt). Muốn giới hạn chặt trên nhiều instance, thay bằng kho chia sẻ (ví dụ Upstash Redis). Ứng dụng không ghi file cục bộ; tiến độ tham quan lưu ở `localStorage` của trình duyệt.
+**Luồng hội thoại**
 
-## Điều khiển
+```mermaid
+flowchart LR
+  Q[Người chơi gõ câu hỏi] --> A["/api/ask<br/>truy xuất kho tư liệu"]
+  A --> G[Gemini Flash<br/>+ model dự phòng]
+  G --> T[Chữ hiện ngay<br/>trong thẻ Minh Anh]
+  T --> N["narrator: tách câu<br/>GET /api/tts"]
+  N --> E["server/edge_tts_stdio.py<br/>(edge-tts, stream MP3)"]
+  E --> P[Phát từng câu,<br/>câu sau tạo song song]
+  E -. lỗi .-> F[Giọng trình duyệt / phụ đề]
+```
+
+- Minh Anh trả lời bằng **ngôn ngữ bạn đang gõ** và chọn giọng tương ứng.
+- Câu hỏi mới dừng ngay âm thanh cũ, không bao giờ phát chồng.
+- Không lưu hội thoại hay file âm thanh; server chỉ giữ vài câu trong bộ nhớ đệm.
+- `/api/ask` và `/api/tts` có giới hạn tần suất và kiểm tra dữ liệu đầu vào (zod).
+
+## 🎮 Điều khiển
 
 | Phím | Chức năng |
 |---|---|
-| W A S D / mũi tên | Di chuyển |
-| Chuột (nhấn vào cảnh để khóa con trỏ) | Nhìn quanh — hoặc kéo chuột nếu không khóa |
-| Shift | Chạy |
-| E | Tương tác / đóng bảng thông tin |
-| V | Góc nhìn thứ nhất ↔ thứ ba |
-| Space | Nhảy |
-| M | Sơ đồ tầng |
-| G | Gọi Minh Anh lại gần |
-| Enter | Hỏi Minh Anh |
-| H | Ẩn/hiện hướng dẫn |
-| Esc | Tạm dừng, cài đặt |
+| <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> / mũi tên | Di chuyển (đi 3 m/s) |
+| <kbd>Shift</kbd> | Chạy (5,5 m/s) |
+| Chuột | Nhìn quanh — nhấp vào cảnh hoặc <kbd>L</kbd> để khóa chuột; không khóa thì giữ và kéo |
+| <kbd>Esc</kbd> | Đang khóa chuột: mở khóa (game vẫn chạy) · Con trỏ đã mở: tạm dừng / cài đặt |
+| <kbd>E</kbd> | Tương tác / đóng bảng thông tin |
+| <kbd>V</kbd> | Góc nhìn thứ nhất ↔ thứ ba |
+| <kbd>Space</kbd> | Nhảy |
+| <kbd>M</kbd> | Sơ đồ tầng & chọn điểm đến |
+| <kbd>G</kbd> | Gọi Minh Anh lại gần |
+| <kbd>Enter</kbd> | Hỏi Minh Anh |
+| <kbd>H</kbd> | Ẩn/hiện hướng dẫn |
 
-Mọi phím (trừ Esc) đổi được trong Cài đặt. Thiết bị cảm ứng có cần điều khiển ảo, nút E/chạy/đổi góc nhìn và kéo để nhìn.
+Mọi phím (trừ Esc) đổi được trong Cài đặt. Thiết bị cảm ứng có cần điều khiển ảo.
 
-## Kiến trúc
+## 🧱 Kiến trúc
+
+**Công nghệ:** Next.js 16 (App Router) · React 19 · Three.js + React Three Fiber + drei · Rapier (vật lý, character controller) · Zustand · Framer Motion · Tailwind CSS 4 · zod · Vitest · Python `edge-tts`.
 
 ```
-app/                    route: / (bản đồ), /dinh-doc-lap (tham quan), /sources, /api/{ask,tts,status}
-components/map/         cảnh thành phố: CityScene, Traffic (xe theo làn, nhường nhau ở giao lộ), LandmarkModels
-components/game/        DinhScene (Canvas + Rapier), Palace (render + collider từ cùng dữ liệu), DinhExperience (HUD)
-components/player/      Humanoid (nhân vật dựng & hoạt ảnh bằng mã), Player (character controller, camera 1st/3rd)
-components/guide/       GuideNPC (state machine FOLLOW/LEAD/WAIT/EXPLAIN/POINT/LISTEN/REJOIN, A* + raycast), GuideCard
-components/tour/        StopList, InfoPanel, FloorMap, Overlays (chọn chế độ, tạm dừng, cảm ứng)
-components/ui/          Providers (theme/lang), primitives, SettingsDialog, SourcesView, WebGLGate
-data/dinh/              sources.ts (dữ kiện + nguồn + mức tin cậy), knowledge.ts, tour.ts, layout.ts (số đo đã xác minh vs ước lượng)
-data/                   landmarks.ts (tọa độ OSM), i18n.ts (toàn bộ chuỗi giao diện vi/en), assets.ts (giấy phép)
-lib/                    city/ (dựng hình học từ OSM), dinh/ (palaceModel, nav), knowledge/ (truy xuất), audio/ (narrator),
-                        server/ (adapter AI & TTS, rate limit), store/ (zustand), tour/ (điều phối tour)
-scripts/fetch-osm.mjs   tải & tiền xử lý dữ liệu OSM → public/data/city.json
-tests/                  vitest: toàn vẹn kho tri thức, i18n, truy xuất, đồ thị điều hướng, mô phỏng vật lý đi bộ
+app/                 Trang: / (bản đồ), /dinh-doc-lap (tham quan), /sources · API: /api/ask, /api/tts, /api/status
+components/
+  map/               CityScene, CityLayers (nhà, mặt đất, cây, mặt trời), LivingCity (xe, thuyền, người, chim)
+  game/              DinhScene (Canvas + Rapier), Palace (render + vật liệu), RouteGuide (dải dẫn đường, marker), DinhExperience (HUD)
+  player/            Player (character controller, camera), Humanoid (nhân vật & hoạt ảnh bằng mã)
+  guide/             GuideNPC (Minh Anh trong thế giới 3D), GuideCard (hội thoại, phụ đề)
+  tour/              StopList, InfoPanel, FloorMap, NavHud, Overlays
+data/                dinh/ (sources, knowledge, tour, layout) · landmarks · i18n (vi/en) · assets (giấy phép)
+lib/
+  city/              buildCity (worker), roads, architecture, textures, geom
+  sim/               traffic, water, life, models, config (LOD)
+  dinh/              palaceModel (hình + collider + đồ thị đi bộ từ một nguồn), route (tìm đường), textures (PBR thủ tục)
+  guide/brain.ts     Máy trạng thái của Minh Anh
+  tour/              director, navigator, destinations
+  server/            ai.ts (Gemini / Claude), tts.ts (edge / Azure / Google), rateLimit
+  audio/narrator.ts  Phát theo câu, phụ đề đồng bộ, tự hạ cấp giọng đọc
+server/              edge_tts_stdio.py (edge-tts: văn bản vào stdin → MP3 ra stdout)
+scripts/fetch-osm.mjs  Tải & tiền xử lý OSM
+tests/               vitest
 ```
 
-Các điểm thiết kế chính:
+**Nguyên tắc thiết kế**
 
-- **Một nguồn dữ liệu cho hình, va chạm và đường đi.** `lib/dinh/palaceModel.ts` sinh hộp hiển thị, collider Rapier và đồ thị điều hướng của Minh Anh từ `data/dinh/layout.ts`. Kiểm thử `tests/palace.test.ts` cho một capsule đi bằng character controller của Rapier từ cổng vào đại sảnh, leo 8 vế cầu thang lên sân thượng tới cột cờ, xuống tầng hầm, và xác nhận tường chặn được.
-- **Kiến thức nằm trong dữ liệu, không nằm trong component.** Mỗi câu thuyết minh dựa trên một `Fact` có nguồn; dữ kiện mâu thuẫn giữa các trang chính thức được đánh dấu `conflicting` và nêu rõ.
-- **AI bị ràng buộc vào kho tư liệu.** `/api/ask` truy xuất mục liên quan rồi gửi kèm cho mô hình với chỉ dẫn chỉ trả lời từ đó; không có khóa hoặc AI lỗi → câu trả lời trích nguyên văn từ kho, và giao diện ghi rõ đó là chế độ demo/dự phòng.
-- **Âm thanh không bao giờ chồng nhau và không làm hỏng tour.** `lib/audio/narrator.ts` phát theo từng câu (phụ đề đồng bộ), tự hạ cấp: TTS đám mây → giọng trình duyệt → chỉ phụ đề.
+- **Một nguồn dữ liệu cho hình, va chạm và đường đi.** `lib/dinh/palaceModel.ts` sinh khối hiển thị, collider Rapier, đồ thị đi bộ và vật cản (kể cả nội thất) từ `data/dinh/layout.ts`. Người chơi, Minh Anh và bộ tìm đường vì vậy nhìn thấy cùng một thế giới.
+- **Kiến thức nằm trong dữ liệu.** Mỗi câu thuyết minh dựa trên một `Fact` có nguồn và mức tin cậy (`verified` / `estimated` / `simulated` / `conflicting`).
+- **AI bị ràng buộc vào kho tư liệu.** Mô hình chỉ được trả lời từ phần tư liệu truy xuất kèm theo; dữ kiện mâu thuẫn được nêu rõ là mâu thuẫn.
+- **Hành vi tách khỏi hiển thị.** Tìm đường (`route.ts`) và quyết định của Minh Anh (`brain.ts`) là mã thuần, được kiểm thử độc lập.
 
-## Độ chính xác — những gì là thật, những gì là mô phỏng
+<details>
+<summary><b>Minh Anh — máy trạng thái</b></summary>
+
+`WAITING` → `LEADING` → (bạn tụt lại hơn ~6 m) `CHECKING_DISTANCE` → `WAITING_FOR_PLAYER` → (hơn ~8 m) `REMINDING` → (bạn đến trong ~3,6 m) `RESUMING` → `LEADING` → đến điểm dừng → `EXPLAINING` (khi bạn ở gần; tạm dừng nếu bạn đi xa) → `WAITING`. Ngoài ra còn `LISTENING` khi bạn mở hộp hỏi đáp và `FOLLOWING` ở chế độ tự do. Mỗi chuyển trạng thái theo khoảng cách có ngưỡng vào/ra khác nhau cộng thời gian chờ để không rung trạng thái. Tất cả thông số nằm trong `lib/game/config.ts`.
+
+</details>
+
+<details>
+<summary><b>Chuyển cảnh bản đồ ↔ Dinh</b></summary>
+
+Next.js 16 giữ trang đã xem trong React `<Activity>`. Khi trang bị ẩn, React Three Fiber hủy WebGL context, vì vậy mỗi lần trang hiện lại thì canvas được gắn mới (`lib/useVisitKey.ts`). Thành phố đã dựng được giữ trong bộ nhớ, nên quay lại không phải dựng lại. Cảnh Dinh chỉ hiện sau khi shader đã biên dịch xong.
+
+</details>
+
+## 🧪 Kiểm thử
+
+```bash
+npm test
+```
+
+60 kiểm thử (Vitest), gồm:
+
+- **Kho tri thức:** toàn vẹn dữ liệu, nguồn, i18n, truy xuất câu trả lời.
+- **Vật lý:** một capsule dùng character controller Rapier đi từ cổng lên sân thượng, xuống tầng hầm, tới các hiện vật theo tuyến đã lập; tường chặn được.
+- **Tìm đường:** từ 7 điểm xuất phát tới mọi điểm đến; tuyến được kiểm tra độc lập là không xuyên vật cản, chỉ đổi tầng qua cầu thang, đi vòng quanh thảm cỏ.
+- **Minh Anh:** dẫn trước, dừng chờ, nhắc có giới hạn, không rung trạng thái, đi tiếp khi bắt kịp, chỉ thuyết minh đúng lúc, không đi khi không có tuyến.
+- **Thành phố:** mặt đường hướng lên, xe không chồng nhau và không kẹt cứng, thuyền luôn trên mặt nước, chim bay trên mái nhà.
+
+## ☁️ Triển khai
+
+**Vercel** (Next.js):
+
+1. Import repository này trên Vercel. Framework được nhận diện là Next.js.
+2. **Settings → Environment Variables**: thêm `GEMINI_API_KEY` (và các biến tùy chọn ở trên).
+3. Deploy. `/api/*` chạy dưới dạng serverless function; `/`, `/dinh-doc-lap`, `/sources` là trang tĩnh.
+
+> ⚠️ Hàm serverless Node của Vercel **không có Python**, nên giọng `edge-tts` không chạy ở đó; ứng dụng tự lùi về giọng trình duyệt hoặc phụ đề, còn Gemini vẫn hoạt động. Muốn có giọng edge-tts khi triển khai, hãy chạy trên máy có Python (VPS, Docker, Render, Railway…) với `npm run build && npm start` sau khi cài `requirements.txt`.
+
+Giới hạn tần suất trong `lib/server/rateLimit.ts` là bộ nhớ trong của từng instance; để giới hạn chặt trên nhiều instance, hãy thay bằng kho dùng chung (ví dụ Redis).
+
+## 📚 Độ chính xác lịch sử
+
+Ứng dụng tách rõ điều đã được kiểm chứng với điều là ước lượng hoặc mô phỏng; toàn bộ nguồn xem tại trang `/sources`.
 
 | Thành phần | Trạng thái |
 |---|---|
-| Mạng lưới đường, sông Sài Gòn, công viên, 2.400 đường bao công trình | Dữ liệu OSM thật (ODbL) |
-| Nhà phố lấp đầy dãy phố | **Sinh tự động**, chú thích rõ trên bản đồ |
-| Vị trí địa danh | Tâm đối tượng OSM (ID ghi trong `data/landmarks.ts`) |
-| Mô hình địa danh trên bản đồ | Hình khối cách điệu theo đường bao OSM |
-| Khuôn viên 300×400 m, thảm cỏ 102 m, khối nhà 4.500 m², cao 26 m, các đường bao quanh | Theo dinhdoclap.gov.vn |
-| Cách chia khối chữ T, chiều cao tầng, vị trí phòng, nội thất, tầng hầm | **Ước lượng / mô phỏng** — trang chính thức không công bố mặt bằng chi tiết |
-| Xe tăng, F‑5E, nhà bát giác, nhà trưng bày | Vị trí theo sơ đồ tham quan chính thức (dạng sơ đồ); mô hình là minh họa |
+| Đường phố, sông, công viên, đường bao công trình | Dữ liệu OSM thật (ODbL) |
+| Kiểu kiến trúc, màu sắc từng công trình; nhà phố lấp đầy | **Sinh tự động**, không phải kiến trúc thật |
+| Khuôn viên 300 × 400 m, thảm cỏ 102 m, khối nhà 4.500 m², cao 26 m, KTS Ngô Viết Thụ | Theo [dinhdoclap.gov.vn](https://dinhdoclap.gov.vn/kien-truc-dinh-doc-lap/) |
+| Cách chia khối chữ T, chiều cao tầng, vị trí phòng, tầng hầm | **Ước lượng / mô phỏng** (không có mặt bằng chi tiết công khai) |
+| Vật liệu: mặt tiền trắng, sàn granite tối, thảm vàng + rèm đỏ (Trình Quốc thư), thảm + rèm xanh (Nội các), rèm hoa đá dạng đốt trúc | Theo ảnh trên trang chính thức; texture **sinh bằng mã** |
+| Chiều cao dải rèm hoa đá, vị trí tâm thảm cỏ | **Ước lượng** theo ảnh và sơ đồ tham quan |
+| Tranh sơn mài trong Phòng Trình Quốc thư | Chỉ là khung minh họa, không tái tạo tác phẩm thật |
+| Tuyến xe, tàu thuyền, đèn tín hiệu, người đi bộ | **Mô phỏng** |
 
-Sơ đồ “Tầng 1 / Tầng 2” trên trang /visit thuộc **Nhà trưng bày “Từ Dinh Norodom đến Dinh Độc Lập”**, không phải khối nhà chính, nên không được dùng làm mặt bằng của Dinh.
+Ảnh tư liệu của Di tích không được nhúng lại; ứng dụng dẫn liên kết tới trang nguồn kèm chú thích.
 
-Ảnh tư liệu không được nhúng lại (bản quyền thuộc Di tích); ứng dụng dẫn liên kết tới trang nguồn kèm chú thích.
+## 🚧 Giới hạn & hướng phát triển
 
-## Giới hạn hiện tại và hướng mở rộng
+- Nhân vật và kiến trúc dựng bằng mã; nên thay bằng mô hình GLB có giấy phép (nhân vật có rig, mô hình Dinh từ bản vẽ đo đạc). Giao diện `HumanoidAnim` và `palaceModel` đã tách sẵn để thay.
+- Chỉ đi được tầng nền, tầng hầm và sân thượng; các tầng lầu “chưa mô hình hóa”. Có lối tắt cầu thang (<kbd>E</kbd>).
+- Giọng Việt của dịch vụ Edge chờ khoảng 3–6 giây trước câu đầu. `edge-tts` dùng dịch vụ không chính thức nên có thể cần cập nhật (`pip install -U edge-tts`).
+- Chưa có nhập câu hỏi bằng giọng nói (micro).
+- Hiệu năng cần đo thêm trên nhiều cấu hình máy; có 3 mức đồ họa Thấp/Trung bình/Cao.
 
-- Nhân vật và kiến trúc được dựng bằng mã; nên thay bằng GLB có giấy phép (nhân vật rig + hoạt ảnh, mô hình Dinh từ bản vẽ đo đạc) — giao diện `HumanoidAnim` và `palaceModel` đã tách sẵn để thay.
-- Chỉ tầng nền, tầng hầm và sân thượng đi được; các tầng lầu có cửa đóng ở giếng thang (“chưa mô hình hóa”). Có lối tắt cầu thang (E) để bỏ qua đoạn leo 8 vế.
-- Hỏi đáp AI và TTS đám mây đã được kiểm tra kiểu và luồng lỗi, nhưng chưa chạy với khóa thật trong môi trường phát triển này.
-- Hiệu năng cần đo trên máy thật: có ba mức đồ họa (Thấp/Trung bình/Cao) điều chỉnh bóng đổ, mật độ cây, số xe và độ phân giải.
-- Chưa có nhận dạng giọng nói (nhập câu hỏi bằng văn bản).
+## 🙏 Nguồn dữ liệu & ghi công
 
-Cập nhật dữ liệu bản đồ: `npm run data:osm` (cần mạng; kết quả thô được cache trong `scripts/.osm-cache/`).
+- Dữ liệu bản đồ © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), giấy phép ODbL 1.0.
+- Tư liệu lịch sử và kiến trúc: [Di tích lịch sử Dinh Độc Lập — dinhdoclap.gov.vn](https://dinhdoclap.gov.vn).
+- Giọng đọc: Microsoft Edge Read Aloud thông qua thư viện [edge-tts](https://github.com/rany2/edge-tts).
+- AI: [Google Gemini API](https://ai.google.dev).
+
+Danh mục đầy đủ tài sản và giấy phép nằm trong `data/assets.ts` và trang `/sources`.
+
+## 📄 Giấy phép
+
+Chưa chọn giấy phép cho mã nguồn: mọi quyền thuộc về tác giả cho đến khi có file `LICENSE`. Dữ liệu OSM trong `public/data/city.json` tuân theo ODbL 1.0.

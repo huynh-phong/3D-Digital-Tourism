@@ -5,7 +5,9 @@ import { GROUNDS, PALACE, ROOMS, floorFromY } from "@/data/dinh/layout";
 import { INTERACTABLES, TOUR_STOPS } from "@/data/dinh/tour";
 import { loc, useLang, useT } from "@/lib/i18n";
 import { runtime, useGame, useProgress } from "@/lib/store/game";
-import { goToStop, STAIR_POINTS } from "@/lib/tour/director";
+import { goToStop, navigateTo, STAIR_POINTS } from "@/lib/tour/director";
+import { DESTINATIONS, DEST_BY_KEY, destKey } from "@/lib/tour/destinations";
+import { navRuntime } from "@/lib/tour/navigator";
 import type { FloorId } from "@/types";
 import { Modal, Segmented } from "@/components/ui/primitives";
 
@@ -20,6 +22,13 @@ export function FloorMap() {
   const floor = picked ?? floorNow;
   const player = useRef<SVGGElement>(null);
   const guide = useRef<SVGCircleElement>(null);
+  const routePath = useRef<SVGPathElement>(null);
+  const destination = useGame((s) => s.destination);
+  const dest = destination ? DEST_BY_KEY.get(destination) : undefined;
+  const go = (key: string) => {
+    navigateTo(key);
+    useGame.setState({ mapOpen: false });
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -34,6 +43,18 @@ export function FloorMap() {
         guide.current.setAttribute("cx", String(runtime.guide[0]));
         guide.current.setAttribute("cy", String(runtime.guide[2]));
         guide.current.style.opacity = floorFromY(runtime.guide[1]) === floor ? "1" : "0.25";
+      }
+      // the live route, drawn only where it runs on the floor shown
+      if (routePath.current) {
+        const r = navRuntime.route;
+        let d = "";
+        let pen = false;
+        r?.points.forEach((p, i) => {
+          const on = floorFromY(p[1]) === floor && (i === 0 || floorFromY(r.points[i - 1][1]) === floor);
+          d += `${on && pen ? "L" : "M"}${p[0].toFixed(1)} ${p[2].toFixed(1)} `;
+          pen = floorFromY(p[1]) === floor;
+        });
+        routePath.current.setAttribute("d", d);
       }
       raf = requestAnimationFrame(tick);
     };
@@ -76,7 +97,7 @@ export function FloorMap() {
             <rect x={PALACE.front.x0} y={PALACE.front.z0} width={PALACE.front.x1 - PALACE.front.x0} height={PALACE.front.z1 - PALACE.front.z0} fill="var(--surface-solid)" stroke="var(--text)" strokeWidth={sw} />
             <rect x={PALACE.rear.x0} y={PALACE.rear.z0} width={PALACE.rear.x1 - PALACE.rear.x0} height={PALACE.rear.z1 - PALACE.rear.z0} fill="var(--surface-solid)" stroke="var(--text)" strokeWidth={sw} />
             {ROOMS.filter((r) => r.floor === floor && r.id !== "roof").map((r) => (
-              <g key={r.id}>
+              <g key={r.id} className={DEST_BY_KEY.has(destKey("room", r.id)) ? "cursor-pointer" : undefined} onClick={() => DEST_BY_KEY.has(destKey("room", r.id)) && go(destKey("room", r.id))}>
                 <rect x={r.rect.x0} y={r.rect.z0} width={r.rect.x1 - r.rect.x0} height={r.rect.z1 - r.rect.z0} fill={r.status === "simulated" ? "var(--bg-2)" : "var(--accent-soft)"} stroke="var(--muted)" strokeWidth={sw} strokeDasharray={r.status === "simulated" ? "1 1" : undefined} />
                 <text x={(r.rect.x0 + r.rect.x1) / 2} y={(r.rect.z0 + r.rect.z1) / 2} fontSize={2.2} textAnchor="middle" fill="var(--text)">{loc(r.name, lang)}</text>
               </g>
@@ -93,9 +114,18 @@ export function FloorMap() {
             ))}
           </>
         )}
+        <path ref={routePath} fill="none" stroke="#2fd3ea" strokeWidth={grounds ? 2.4 : 0.7} strokeLinecap="round" strokeLinejoin="round" strokeDasharray={grounds ? "5 3" : "1.6 0.9"} />
+        {dest && dest.floor === floor && (
+          <circle cx={dest.point[0]} cy={dest.point[2]} r={grounds ? 6 : 1.6} fill="none" stroke="#2fd3ea" strokeWidth={grounds ? 2 : 0.5} />
+        )}
         {INTERACTABLES.filter((i) => i.floor === floor).map((i) => (
-          <rect key={i.id} x={i.position[0] - (grounds ? 3 : 0.8)} y={i.position[2] - (grounds ? 3 : 0.8)} width={grounds ? 6 : 1.6} height={grounds ? 6 : 1.6} fill="#d4a017" transform={`rotate(45 ${i.position[0]} ${i.position[2]})`}>
-            <title>{loc(i.title, lang)}</title>
+          <rect
+            key={i.id}
+            x={i.position[0] - (grounds ? 3 : 0.8)} y={i.position[2] - (grounds ? 3 : 0.8)} width={grounds ? 6 : 1.6} height={grounds ? 6 : 1.6}
+            fill="#d4a017" transform={`rotate(45 ${i.position[0]} ${i.position[2]})`}
+            className="cursor-pointer" onClick={() => go(destKey("interactable", i.id))}
+          >
+            <title>{`${t.nav.directions}: ${loc(i.title, lang)}`}</title>
           </rect>
         ))}
         {TOUR_STOPS.filter((s) => s.floor === floor).map((s) => {
@@ -114,6 +144,30 @@ export function FloorMap() {
           <path d={grounds ? "M0 -6 L4.5 5 L0 2.5 L-4.5 5 Z" : "M0 -1.8 L1.4 1.5 L0 0.8 L-1.4 1.5 Z"} fill="var(--blue)" stroke="white" strokeWidth={sw * 0.6} />
         </g>
       </svg>
+      {/* every destination as a button (keyboard / screen-reader friendly) */}
+      <div className="mt-3 grid gap-2 text-[12px] sm:grid-cols-3">
+        {(["stop", "interactable", "room"] as const).map((kind) => (
+          <section key={kind}>
+            <h3 className="mb-1 text-[10.5px] font-bold uppercase tracking-wide text-muted">
+              {kind === "stop" ? t.nav.groupStops : kind === "interactable" ? t.nav.groupExhibits : t.nav.groupRooms}
+            </h3>
+            <ul className="scroll-thin max-h-28 space-y-0.5 overflow-y-auto pr-1">
+              {DESTINATIONS.filter((d) => d.kind === kind).map((d) => (
+                <li key={d.key}>
+                  <button
+                    type="button"
+                    onClick={() => go(d.key)}
+                    className={`w-full truncate rounded-md px-1.5 py-0.5 text-left hover:bg-accent-soft ${d.key === destination ? "font-semibold text-accent" : ""}`}
+                  >
+                    {loc(d.title, lang)} <span className="text-[10.5px] text-muted">· {t.tour.floors[d.floor]}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+      <p className="mt-1 text-[11px] text-muted">{t.nav.pickHint}</p>
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-muted">
         <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded-full bg-blue align-middle" />{t.tour.current}</span>
         <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded-full align-middle" style={{ background: "#1f3557" }} />{t.guide.name}</span>

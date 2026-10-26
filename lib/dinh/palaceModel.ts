@@ -1,4 +1,5 @@
 import { GROUNDS, LEVEL, PALACE, PAVILION, STAIRS } from "@/data/dinh/layout";
+import { rng } from "@/lib/geo";
 import type { FloorId, NavEdge, NavNode, Vec3 } from "@/types";
 
 /**
@@ -8,7 +9,7 @@ import type { FloorId, NavEdge, NavNode, Vec3 } from "@/types";
  */
 
 export type Mat =
-  | "facade" | "wall" | "marble" | "carpet" | "wood" | "stone" | "glass" | "concrete"
+  | "facade" | "wall" | "floor" | "wood" | "stone" | "glass" | "concrete"
   | "path" | "roof" | "dark" | "metal" | "curtain" | "gold" | "door" | "lacquer" | "paper" | "fabric" | "basementWall";
 
 export interface Box {
@@ -26,12 +27,55 @@ export interface StairVisual {
   steps: Box[];
 }
 
+export interface Tree {
+  x: number;
+  z: number;
+  s: number; // scale
+  h: number; // 0..1 variation (species, hue)
+}
+
 export interface PalaceModel {
   boxes: Box[];
   steps: Box[];
   nav: { nodes: NavNode[]; edges: NavEdge[] };
   closedDoors: { p: Vec3; ry: number; w: number; h: number }[];
+  /** grounds trees (trunks are obstacles for walking and route planning) */
+  trees: Tree[];
 }
+
+/** Trunk collision radius for a tree of scale s. */
+export const trunkRadius = (s: number) => 0.5 * s;
+
+/**
+ * Furniture and exhibit layout shared by the renderer (Palace.tsx) and the
+ * physics / route planner (their footprints are added to `boxes` as invisible
+ * colliders), so nothing can be walked or routed through.
+ */
+export const FURNITURE = (() => {
+  const y = LEVEL.f1;
+  const cabChairs: { x: number; z: number; ry: number }[] = [];
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI - Math.PI;
+    for (const side of [1, -1]) {
+      const ang = side > 0 ? a : -a;
+      const x = 32 + Math.cos(ang) * 7.4, z = -23 + Math.sin(ang) * 3.3;
+      cabChairs.push({ x, z, ry: Math.atan2(32 - x, -23 - z) });
+    }
+  }
+  const credSeats: { x: number; z: number; seats: number; side: 1 | -1 }[] = [];
+  for (const side of [1, -1] as const) credSeats.push({ x: side * 9.4, z: -39.6, seats: 1, side }, { x: side * 9.4, z: -45, seats: 3, side }, { x: side * 9.4, z: -51.2, seats: 1, side });
+  return {
+    y,
+    cabTable: { x: 32, z: -23, rx: 6.6, rz: 2.5 },
+    cabChairs,
+    credSeats,
+    credTables: [-42.2, -48.3].flatMap((z) => [[8.9, z], [-8.9, z]] as [number, number][]),
+    credVases: [-41, -47, -53, -57.5].flatMap((z) => [[11.8, z], [-11.8, z]] as [number, number][]),
+    credDesk: { x: 0, z: -57, w: 3.2, d: 1 },
+    hallColumns: [-10, -4, 4, 10].flatMap((x) => [-16, -30].map((z) => [x, z] as [number, number])),
+  };
+})();
+export const seatSize = (seats: number) => ({ w: 0.85 * seats, d: 0.95 });
 
 const T = 0.4; // wall thickness
 
@@ -54,15 +98,16 @@ export function buildPalace(): PalaceModel {
    * Axis-aligned wall from (x0,z0) to (x1,z1) — one of the axes must match.
    * openings: { c: centre along the wall, w: width, h: height from y0 }.
    */
-  const wall = (x0: number, z0: number, x1: number, z1: number, y0: number, y1: number, m: Mat, openings: { c: number; w: number; h: number }[] = []) => {
+  const wall = (x0: number, z0: number, x1: number, z1: number, y0: number, y1: number, m: Mat, openings: { c: number; w: number; h: number }[] = [], visible = true) => {
     const alongX = Math.abs(z1 - z0) < 1e-6;
     const a0 = alongX ? Math.min(x0, x1) : Math.min(z0, z1);
     const a1 = alongX ? Math.max(x0, x1) : Math.max(z0, z1);
     const fixed = alongX ? z0 : x0;
     const seg = (s0: number, s1: number, ya: number, yb: number) => {
       if (s1 - s0 < 0.01 || yb - ya < 0.01) return;
-      if (alongX) box(s0, ya, fixed - T / 2, s1, yb, fixed + T / 2, m);
-      else box(fixed - T / 2, ya, s0, fixed + T / 2, yb, s1, m);
+      const extra = visible ? {} : { visible: false };
+      if (alongX) box(s0, ya, fixed - T / 2, s1, yb, fixed + T / 2, m, true, extra);
+      else box(fixed - T / 2, ya, s0, fixed + T / 2, yb, s1, m, true, extra);
     };
     const ops = [...openings].sort((a, b) => a.c - b.c);
     let cur = a0;
@@ -133,9 +178,15 @@ export function buildPalace(): PalaceModel {
   // -------------------------------------------------------------- front block
   // Outer walls, full height. Front wall has the main entrance.
   const H = roof; // top of walls (roof slab level)
-  wall(F.x0, F.z1, F.x1, F.z1, f1, H, "facade", [{ c: 0, w: 6, h: 3.6 }]);
+  // Ground floor: glazed front (hall + cabinet room) and glazed cabinet side;
+  // the glass itself is drawn by the façade component, these are its colliders.
+  const glazeTop = ceilF1 + 0.3;
+  wall(F.x0, F.z1, -16, F.z1, f1, glazeTop, "facade");
+  wall(-16, F.z1, F.x1, F.z1, f1, glazeTop, "glass", [{ c: 0, w: 6, h: 3.6 }], false);
+  wall(F.x0, F.z1, F.x1, F.z1, glazeTop, H, "facade");
   wall(F.x0, F.z0, F.x0, F.z1, f1, H, "facade");
-  wall(F.x1, F.z0, F.x1, F.z1, f1, H, "facade");
+  wall(F.x1, F.z0, F.x1, F.z1, f1, glazeTop, "glass", [], false);
+  wall(F.x1, F.z0, F.x1, F.z1, glazeTop, H, "facade");
   // Back wall of the front block, outside the rear wing.
   wall(F.x0, F.z0, Rr.x0, F.z0, f1, H, "facade");
   wall(Rr.x1, F.z0, F.x1, F.z0, f1, H, "facade");
@@ -181,7 +232,7 @@ export function buildPalace(): PalaceModel {
   const flightZ0 = -64 - shaftL; // far end (-74)
   const nearLand = -64 - 2.4; // -66.4
   // Ground-floor slab over the basement: hole over the basement shaft flights.
-  holes(Rr.x0, Rr.x1, Rr.z0, Rr.z1, sb.x0, sb.x0 + shaftW, flightZ0, nearLand, f1 - 0.3, f1, "marble");
+  holes(Rr.x0, Rr.x1, Rr.z0, Rr.z1, sb.x0, sb.x0 + shaftW, flightZ0, nearLand, f1 - 0.3, f1, "wall");
   // Ground-floor ceiling (rear wing): hole over the roof shaft flights.
   holes(Rr.x0, Rr.x1, Rr.z0, Rr.z1, sr.x0, sr.x0 + shaftW, flightZ0, -64, ceilF1, ceilF1 + 0.3, "wall");
   // Roof slab over the rear wing: hole over the roof shaft flights (top landing stays).
@@ -236,6 +287,13 @@ export function buildPalace(): PalaceModel {
       node(b, [x, yTop, up ? zF - 0.8 : zN + 0.8], "f1");
       link(prev, a, b);
       prev = b;
+      if (k < st.flights - 1) {
+        // walk across the landing to the next lane before turning (keeps clear of the divider)
+        const c = `${id}-${k}c`;
+        node(c, [up ? xB : xA, yTop, up ? zF - 0.8 : zN + 0.8], "f1");
+        link(b, c);
+        prev = c;
+      }
       y = yTop;
       // closed doors on intermediate near landings
       if (!up && yTop < st.to - 0.01 && yTop > st.from + 0.01) closedDoors.push({ p: [xm, yTop, zNear - 0.25], ry: 0, w: 2, h: 2.6 });
@@ -276,6 +334,34 @@ export function buildPalace(): PalaceModel {
   // flagpole collider
   box(-0.25, roof, -23.25, 0.25, roof + 12, -22.75, "metal", true, { visible: false });
 
+  // ------------------------------------------------- furniture & exhibit footprints
+  const prop = (x: number, y: number, z: number, hx: number, hy: number, hz: number, ry = 0) =>
+    boxes.push({ p: [x, y, z], s: [hx * 2, hy * 2, hz * 2], m: "dark", collide: true, visible: false, ry });
+  {
+    const Fu = FURNITURE, y = Fu.y;
+    prop(Fu.cabTable.x, y + 0.5, Fu.cabTable.z, 6.6, 0.5, 2.6);
+    for (const c of Fu.cabChairs) prop(c.x, y + 0.5, c.z, 0.32, 0.5, 0.32);
+    for (const [x, z] of Fu.hallColumns) prop(x, y + 2.35, z, 0.45, 2.3, 0.45);
+    for (const p of Fu.credSeats) {
+      const { w, d } = seatSize(p.seats);
+      prop(p.x, y + 0.5, p.z, d / 2, 0.5, (w + 0.8) / 2);
+    }
+    for (const [x, z] of Fu.credTables) prop(x, y + 0.3, z, 0.38, 0.3, 0.63);
+    for (const [x, z] of Fu.credVases) prop(x, y + 1, z, 0.3, 1, 0.3);
+    prop(Fu.credDesk.x, y + 0.4, Fu.credDesk.z, Fu.credDesk.w / 2, 0.4, Fu.credDesk.d / 2);
+    // basement (simulated) desks and table
+    for (let i = 0; i < 3; i++) prop(-17.5, LEVEL.basement + 0.6, -54 + i * 4.5, 0.7, 0.6, 1.5);
+    prop(10, LEVEL.basement + 0.5, -50, 2, 0.5, 1);
+    // grounds: fountain basin, exhibits, octagon, exhibition house
+    prop(GROUNDS.lawnCenter[0], 0.3, GROUNDS.lawnCenter[1], 5.4, 0.3, 5.4);
+    prop(GROUNDS.lawnCenter[0], 0.3, GROUNDS.lawnCenter[1], 5.4, 0.3, 5.4, Math.PI / 4);
+    prop(76, 1.2, 116, 1.8, 1.2, 3.3, 0.6);
+    prop(86, 1.2, 106, 1.8, 1.2, 3.3, 0.4);
+    prop(106, 1.5, 84, 3.5, 1.5, 7, -0.5);
+    prop(176, 0.6, 126, 4.5, 0.6, 4.5);
+    prop(-170, 4, 58, 6, 4, 13);
+  }
+
   // ----------------------------------------------------------------- basement
   box(Rr.x0, bas - 0.3, Rr.z0, Rr.x1, bas, Rr.z1, "concrete");
   wall(Rr.x0, F.z0, Rr.x1, F.z0, bas, f1 - 0.3, "basementWall");
@@ -306,7 +392,7 @@ export function buildPalace(): PalaceModel {
   node("stepsTop", [0, f1, stepTopZ - 1], "f1");
   link("forecourt", "stepsBottom", "stepsTop");
   // Exhibits around the lawn
-  node("exTanks", [80, 0, 108], "grounds");
+  node("exTanks", [78, 0, 96], "grounds");
   node("exF5e", [100, 0, 92], "grounds");
   link(`ring${1}`, "exTanks", "exF5e", `ring0`);
   node("octagon", [170, 0, 122], "grounds");
@@ -318,9 +404,10 @@ export function buildPalace(): PalaceModel {
   node("door", [0, f1, F.z1 - 1.5], "f1");
   node("hall", [0, f1, -22], "f1");
   node("cabDoor", [16, f1, -22.5], "f1");
-  node("cabinet", [24, f1, -22], "f1");
+  node("cabinet", [23, f1, -21.5], "f1");
+  node("cabinetN", [25, f1, -16.5], "f1");
   node("cabinet2", [32, f1, -16], "f1");
-  link("stepsTop", "door", "hall", "cabDoor", "cabinet", "cabinet2");
+  link("stepsTop", "door", "hall", "cabDoor", "cabinet", "cabinetN", "cabinet2");
   node("credDoor", [0, f1, F.z0 - 1], "f1");
   node("cred", [0, f1, -46], "f1");
   node("cred2", [8.5, f1, -56], "f1");
@@ -341,7 +428,7 @@ export function buildPalace(): PalaceModel {
   node("bCommsDoor", [-10.5, bas, -59], "basement");
   node("bComms", [-9, bas, -51], "basement");
   node("bMapsDoor", [10.5, bas, -59], "basement");
-  node("bMaps", [10, bas, -50], "basement");
+  node("bMaps", [6, bas, -50], "basement");
   link("sb-0", "bCorrW", "bCorr", "bCorrE", "bMapsDoor", "bMaps");
   link("bCorrW", "bCommsDoor", "bComms");
 
@@ -360,7 +447,40 @@ export function buildPalace(): PalaceModel {
     if (n.id.startsWith("sb") || n.id.startsWith("sr")) n.floor = n.p[1] < 0 ? "basement" : n.p[1] > roof - 1 ? "roof" : "f1";
   }
 
-  return { boxes, steps, nav: { nodes, edges }, closedDoors };
+  return { boxes, steps, nav: { nodes, edges }, closedDoors, trees: plantTrees(nodes, edges) };
+}
+
+/** Old trees around the grounds, kept off the lawn, drives, palace and exhibits. */
+function plantTrees(nodes: NavNode[], edges: NavEdge[]): Tree[] {
+  // keep trunks off the walking graph's ground-level paths
+  const byId = new Map(nodes.map((n) => [n.id, n.p]));
+  const paths = edges.map(([a, b]) => [byId.get(a)!, byId.get(b)!]).filter(([a, b]) => a[1] < 0.5 && b[1] < 0.5);
+  const nearPath = (x: number, z: number) =>
+    paths.some(([a, b]) => {
+      const dx = b[0] - a[0], dz = b[2] - a[2], l2 = dx * dx + dz * dz;
+      const t = l2 ? Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[2]) * dz) / l2)) : 0;
+      return Math.hypot(a[0] + dx * t - x, a[2] + dz * t - z) < 4.5;
+    });
+  const [cx, cz] = GROUNDS.lawnCenter;
+  const R = rng(1966);
+  const out: Tree[] = [];
+  const n = 300;
+  let tries = 0;
+  while (out.length < n && tries < n * 20) {
+    tries++;
+    const x = (R() * 2 - 1) * (GROUNDS.halfW - 6), z = (R() * 2 - 1) * (GROUNDS.halfD - 6);
+    if (Math.hypot(x - cx, z - cz) < GROUNDS.ringRadius + GROUNDS.ringWidth / 2 + 5) continue; // lawn + ring drive
+    if (Math.abs(x) < 58 && z > -98 && z < 30) continue; // palace + forecourt
+    if (Math.abs(x) < 13 && z > 60) continue; // gate drive
+    if (Math.hypot(x - 90, z - 100) < 28) continue; // outdoor exhibits
+    if (Math.hypot(x - 176, z - 126) < 11) continue; // octagon
+    if (Math.hypot(x + 160, z - 58) < 24) continue; // exhibition house
+    if (Math.abs(z + 128) < 22 && Math.abs(x) < 72) continue; // tennis courts
+    if (nearPath(x, z)) continue;
+    if (out.some((t) => Math.hypot(t.x - x, t.z - z) < 7.5)) continue;
+    out.push({ x, z, s: 0.8 + R() * 0.9, h: R() });
+  }
+  return out;
 }
 
 function ringPillars(halfX: number, z0: number, z1: number, step: number): [number, number][] {

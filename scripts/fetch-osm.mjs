@@ -70,6 +70,8 @@ async function runQueryRemote(q) {
 }
 
 const elements = [];
+// Water-body centrelines for boat routes (river + canals).
+const waterwayQuery = `[out:json][timeout:180];(way["waterway"~"^(river|canal)$"]${B};);out tags geom;`;
 for (const q of queries) elements.push(...(await runQuery(q)).elements);
 
 const ways = elements.filter((e) => e.type === "way");
@@ -106,11 +108,17 @@ for (const w of ways) {
   if (c.length < 2) continue;
   if (t.highway) {
     if (t.tunnel && t.tunnel !== "no") continue; // underground (e.g. Thủ Thiêm tunnel)
+    const closed = c.length > 3 && c[0][0] === c[c.length - 1][0] && c[0][1] === c[c.length - 1][1];
     roads.push({
       k: t.highway,
       w: ROAD_WIDTH[t.highway] ?? 6,
       n: t.name || undefined,
-      b: t.bridge === "yes" ? 1 : undefined,
+      b: t.bridge && t.bridge !== "no" ? 1 : undefined,
+      // oneway: 1 = along the geometry, -1 = against it
+      o: t.oneway === "yes" || t.oneway === "true" || t.oneway === "1" || t.junction === "roundabout" ? 1 : t.oneway === "-1" ? -1 : undefined,
+      l: t.layer && parseInt(t.layer, 10) ? parseInt(t.layer, 10) : undefined,
+      // closed pedestrian ways are squares/plazas (areas), not loop paths
+      a: closed && (t.area === "yes" || t.highway === "pedestrian") ? 1 : undefined,
       p: c,
     });
   } else if (t.building) {
@@ -189,6 +197,16 @@ for (const el of fullRels) {
   }
 }
 
+const waterways = [];
+try {
+  for (const w of (await runQuery(waterwayQuery)).elements) {
+    if (w.type !== "way" || !w.geometry) continue;
+    waterways.push({ k: w.tags?.waterway, n: w.tags?.name, p: w.geometry.filter(Boolean).map((n) => project(n.lat, n.lon)) });
+  }
+} catch (e) {
+  console.warn("waterway centrelines unavailable:", e.message);
+}
+
 const out = {
   attribution: "© OpenStreetMap contributors, ODbL 1.0 — https://www.openstreetmap.org/copyright",
   fetchedAt: new Date().toISOString(),
@@ -200,6 +218,7 @@ const out = {
   water,
   green,
   bridges,
+  waterways,
 };
 mkdirSync("public/data", { recursive: true });
 writeFileSync("public/data/city.json", JSON.stringify(out));

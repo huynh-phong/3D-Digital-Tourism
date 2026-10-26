@@ -6,14 +6,12 @@ import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import type { KinematicCharacterController, Collider } from "@dimforge/rapier3d-compat";
 import { angleDelta, clamp, damp } from "@/lib/geo";
+import { MOVE } from "@/lib/game/config";
 import { runtime, useGame } from "@/lib/store/game";
 import { useSettings, type Action } from "@/lib/store/settings";
+import { usePointerLock } from "@/lib/game/pointer";
 import { Humanoid, newAnim, VISITOR } from "./Humanoid";
 
-const WALK = 1.75;
-const RUN = 4.2;
-const GRAVITY = 22;
-const JUMP_V = 5.2;
 const EYE = 1.62;
 const HALF_H = 0.55;
 const RADIUS = 0.3;
@@ -49,6 +47,7 @@ export function Player({
   const vel = useRef(new THREE.Vector3());
   const facing = useRef(spawn.yaw);
   const grounded = useRef(true);
+  const smoothSpeed = useRef(0);
   const tmp = useMemo(() => ({ fwd: new THREE.Vector3(), right: new THREE.Vector3(), move: new THREE.Vector3(), target: new THREE.Vector3(), camPos: new THREE.Vector3() }), []);
   const camMode = useGame((s) => s.camMode);
   const phase = useGame((s) => s.phase);
@@ -100,10 +99,11 @@ export function Player({
       ix += runtime.input.x;
       iz += runtime.input.y;
     }
+    // normalise so diagonals are never faster than straight lines
     const len = Math.hypot(ix, iz);
     if (len > 1) { ix /= len; iz /= len; }
     const running = playing && (keys?.has("run") || runtime.input.run);
-    const speedTarget = (running ? RUN : WALK) * Math.min(1, len);
+    const speedTarget = (running ? MOVE.run : MOVE.walk) * Math.min(1, len);
 
     // camera-relative movement
     tmp.fwd.set(Math.sin(c.yaw), 0, Math.cos(c.yaw));
@@ -111,10 +111,13 @@ export function Player({
     tmp.move.copy(tmp.fwd).multiplyScalar(iz).addScaledVector(tmp.right, ix);
     if (tmp.move.lengthSq() > 1e-6) tmp.move.normalize();
 
-    // accelerate / decelerate smoothly
+    // accelerate / decelerate at bounded rates (responsive, never instantaneous)
     const horiz = new THREE.Vector3(vel.current.x, 0, vel.current.z);
     const desired = tmp.move.clone().multiplyScalar(speedTarget);
-    horiz.lerp(desired, damp(desired.lengthSq() > horiz.lengthSq() ? 8 : 12, dt));
+    const dv = desired.clone().sub(horiz);
+    const maxDv = (speedTarget > 0.01 ? MOVE.accel : MOVE.decel) * dt;
+    if (dv.length() > maxDv) dv.setLength(maxDv);
+    horiz.add(dv);
     vel.current.x = horiz.x;
     vel.current.z = horiz.z;
 
@@ -122,11 +125,11 @@ export function Player({
     if (grounded.current) {
       vel.current.y = -2;
       if (playing && (keys?.has("jump") || runtime.input.jump)) {
-        vel.current.y = JUMP_V;
+        vel.current.y = MOVE.jumpVelocity;
         runtime.input.jump = false;
       }
     } else {
-      vel.current.y -= GRAVITY * dt;
+      vel.current.y -= MOVE.gravity * dt;
     }
 
     const desiredMove = { x: vel.current.x * dt, y: vel.current.y * dt, z: vel.current.z * dt };
@@ -140,7 +143,9 @@ export function Player({
       next.x = spawn.pos[0]; next.y = spawn.pos[1] + 2; next.z = spawn.pos[2];
     }
     rb.setNextKinematicTranslation(next);
+    // measured (collision-limited) ground speed drives the gait: walking into a wall never "runs in place"
     const actualSpeed = Math.hypot(m.x, m.z) / Math.max(dt, 1e-4);
+    smoothSpeed.current += (actualSpeed - smoothSpeed.current) * damp(14, dt);
 
     // ---- facing & animation
     const feetY = next.y - HALF_H - RADIUS;
@@ -152,7 +157,7 @@ export function Player({
     } else if (horiz.lengthSq() > 0.05) {
       const want = Math.atan2(horiz.x, horiz.z);
       const d = angleDelta(facing.current, want);
-      const step = d * damp(12, dt);
+      const step = clamp(d * damp(12, dt), -MOVE.turnRate * dt, MOVE.turnRate * dt);
       facing.current += step;
       turnRate = step / dt;
     }
@@ -162,13 +167,13 @@ export function Player({
       visual.current.visible = camMode === "third";
     }
     const a = anim.current;
-    a.speed = grounded.current ? actualSpeed : 0;
+    a.speed = grounded.current ? smoothSpeed.current : 0;
     a.turnRate = turnRate;
     a.state = useGame.getState().panel ? "interact" : "move";
 
     runtime.player = [next.x, feetY, next.z];
     runtime.playerYaw = facing.current;
-    runtime.playerSpeed = actualSpeed;
+    runtime.playerSpeed = smoothSpeed.current;
     runtime.cameraYaw = c.yaw;
 
     // ---- camera
@@ -214,7 +219,12 @@ export function Player({
   );
 }
 
-/** Mouse / touch look. Pointer lock when available, drag-to-look otherwise. */
+/**
+ * Mouse / touch look. With pointer lock, raw mouse deltas turn the camera;
+ * without it, dragging on the scene does. Deltas are only applied while the
+ * lock is held (no drift after Esc), the first events after a lock change and
+ * single-event spikes (a known browser glitch) are discarded.
+ */
 export function useLook(cam: React.RefObject<CameraState>, canvas: HTMLCanvasElement | null, enabled: boolean) {
   useEffect(() => {
     if (!canvas) return;
@@ -230,7 +240,10 @@ export function useLook(cam: React.RefObject<CameraState>, canvas: HTMLCanvasEle
       c.pitch = clamp(c.pitch, -1.2, 1.2);
     };
     const onMove = (e: MouseEvent) => {
-      if (document.pointerLockElement === canvas) apply(e.movementX, e.movementY);
+      if (document.pointerLockElement !== canvas) return;
+      if (performance.now() - usePointerLock.getState().changedAt < 80) return;
+      if (Math.abs(e.movementX) > 300 || Math.abs(e.movementY) > 300) return;
+      apply(e.movementX, e.movementY);
     };
     const onDown = (e: PointerEvent) => {
       if (document.pointerLockElement === canvas) return;
@@ -245,11 +258,14 @@ export function useLook(cam: React.RefObject<CameraState>, canvas: HTMLCanvasEle
       lastY = e.clientY;
     };
     const onUp = () => (dragging = false);
+    // a lock change always ends any drag in progress
+    const unsub = usePointerLock.subscribe(() => (dragging = false));
     document.addEventListener("mousemove", onMove);
     canvas.addEventListener("pointerdown", onDown);
     window.addEventListener("pointermove", onPMove);
     window.addEventListener("pointerup", onUp);
     return () => {
+      unsub();
       document.removeEventListener("mousemove", onMove);
       canvas.removeEventListener("pointerdown", onDown);
       window.removeEventListener("pointermove", onPMove);

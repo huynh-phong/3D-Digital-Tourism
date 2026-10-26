@@ -4,6 +4,12 @@ import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef, type RefObject } from "react";
 import * as THREE from "three";
 import { clamp, damp } from "@/lib/geo";
+import { GAIT } from "@/lib/game/config";
+
+const smoothstep = (a: number, b: number, x: number) => {
+  const t = clamp((x - a) / (b - a), 0, 1);
+  return t * t * (3 - 2 * t);
+};
 
 /**
  * Procedural, code-animated humanoid (no external assets). Gait phase is
@@ -56,7 +62,7 @@ function capsule(r: number, len: number) {
 export function Humanoid({ outfit, anim, castShadow = true }: { outfit: Outfit; anim: RefObject<HumanoidAnim>; castShadow?: boolean }) {
   const s = outfit.height / 1.72;
   const mats = useMemo(() => {
-    const m = (c: string, r = 0.8) => new THREE.MeshStandardMaterial({ color: c, roughness: r, transparent: true });
+    const m = (c: string, r = 0.8) => new THREE.MeshStandardMaterial({ color: c, roughness: r });
     return {
       skin: m(outfit.skin, 0.6), hair: m(outfit.hair, 0.5), top: m(outfit.top), accent: m(outfit.topAccent),
       bottom: m(outfit.bottom), shoes: m(outfit.shoes, 0.5), eye: m("#1a1a1a", 0.3), badge: m(outfit.badge ?? outfit.top, 0.4),
@@ -88,8 +94,8 @@ export function Humanoid({ outfit, anim, castShadow = true }: { outfit: Outfit; 
   const spine = useRef<THREE.Group>(null);
   const head = useRef<THREE.Group>(null);
   const L = { thigh: useRef<THREE.Group>(null), knee: useRef<THREE.Group>(null), sh: useRef<THREE.Group>(null), el: useRef<THREE.Group>(null) };
-  const R = { thigh: useRef<THREE.Group>(null), knee: useRef<THREE.Group>(null), sh: useRef<THREE.Group>(null), el: useRef<THREE.Group>(null) };
-  const st = useRef({ phase: 0, t: 0, point: 0, talk: 0, interact: 0, wave: 0, moveAmp: 0 });
+  const R_ = { thigh: useRef<THREE.Group>(null), knee: useRef<THREE.Group>(null), sh: useRef<THREE.Group>(null), el: useRef<THREE.Group>(null) };
+  const st = useRef({ phase: 0, t: 0, point: 0, talk: 0, interact: 0, wave: 0, listen: 0, moveAmp: 0, run: 0 });
   const tmp = useMemo(() => ({ v: new THREE.Vector3(), q: new THREE.Quaternion(), m: new THREE.Matrix4() }), []);
 
   useFrame((_, rawDt) => {
@@ -98,48 +104,68 @@ export function Humanoid({ outfit, anim, castShadow = true }: { outfit: Outfit; 
     if (!a || !root.current) return;
     const k = st.current;
     k.t += dt;
-    const running = a.speed > 2.6;
-    const stride = running ? 2.3 : 1.45; // metres per full gait cycle
-    const moving = a.speed > 0.08 || Math.abs(a.turnRate) > 1.2;
-    const gaitSpeed = Math.max(a.speed, Math.abs(a.turnRate) > 1.2 ? 0.6 : 0);
-    k.phase += (gaitSpeed / stride) * Math.PI * 2 * dt;
-    k.moveAmp += ((moving ? clamp(gaitSpeed / 1.4, 0.35, running ? 1.6 : 1) : 0) - k.moveAmp) * damp(10, dt);
+    // ---- gait, driven by the measured ground speed (no foot sliding):
+    // cycle length grows with speed; thigh amplitude is chosen so the stance
+    // foot moves backward at the body's speed on average (A = cycle / 4·leg).
+    const v = a.speed;
+    const leg = GAIT.legLength * s;
+    k.run += (smoothstep(GAIT.runBlendFrom, GAIT.runBlendTo, v) - k.run) * damp(8, dt); // walk↔run blend
+    const turningInPlace = v < 0.35 && Math.abs(a.turnRate) > 1.2;
+    const cycle = GAIT.cycleBase + GAIT.cyclePerSpeed * v;
+    const freq = turningInPlace ? 1.1 : v / cycle;
+    k.phase += freq * Math.PI * 2 * dt;
+    const targetAmp = turningInPlace ? 0.35 : clamp(v / 0.5, 0, 1);
+    k.moveAmp += (targetAmp - k.moveAmp) * damp(targetAmp > k.moveAmp ? 12 : 9, dt);
+    if (k.moveAmp < 0.08) {
+      // stopping: let the legs settle together instead of freezing mid-stride
+      const rest = Math.round(k.phase / Math.PI) * Math.PI;
+      k.phase += (rest - k.phase) * damp(8, dt);
+    }
     const amp = k.moveAmp;
     const ph = k.phase;
+    const R = k.run;
+    const thighA = Math.min(0.85, (turningInPlace ? 0.6 : cycle) / (4 * leg)) * amp;
     const want = (cond: boolean, cur: number, rate = 6) => cur + ((cond ? 1 : 0) - cur) * damp(rate, dt);
     k.point = want(a.state === "point" && !!a.pointAt, k.point);
     k.talk = want(a.state === "talk" || a.state === "point", k.talk, 4);
     k.interact = want(a.state === "interact", k.interact, 8);
     k.wave = want(a.state === "wave", k.wave, 5);
+    k.listen = want(a.state === "listen", k.listen, 4);
 
-    // Legs
-    const swing = 0.55 * amp;
-    if (L.thigh.current && R.thigh.current && L.knee.current && R.knee.current) {
-      L.thigh.current.rotation.x = -Math.sin(ph) * swing;
-      R.thigh.current.rotation.x = Math.sin(ph) * swing;
-      L.knee.current.rotation.x = Math.max(0, Math.sin(ph - 1.2)) * 0.9 * amp + 0.02;
-      R.knee.current.rotation.x = Math.max(0, Math.sin(ph + Math.PI - 1.2)) * 0.9 * amp + 0.02;
+    // Legs: walk keeps the knee nearly straight in stance; run tucks the swing leg high.
+    if (L.thigh.current && R_.thigh.current && L.knee.current && R_.knee.current) {
+      L.thigh.current.rotation.x = -Math.sin(ph) * thighA - 0.08 * R * amp;
+      R_.thigh.current.rotation.x = Math.sin(ph) * thighA - 0.08 * R * amp;
+      const kneeWalk = (q: number) => Math.max(0, Math.sin(q - 1.2)) * 0.9 * thighA * 1.6 + 0.03;
+      const kneeRun = (q: number) => (0.35 + Math.max(0, Math.sin(q - 0.5)) * 1.5) * amp;
+      L.knee.current.rotation.x = kneeWalk(ph) * (1 - R) + kneeRun(ph) * R;
+      R_.knee.current.rotation.x = kneeWalk(ph + Math.PI) * (1 - R) + kneeRun(ph + Math.PI) * R;
     }
-    // Hips bob + lean
+    // Hips: walk bobs twice per cycle; running adds a flight bounce and drops the hips slightly.
     if (hips.current) {
-      hips.current.position.y = 0.92 + Math.abs(Math.cos(ph)) * 0.03 * amp - 0.015 * amp;
-      hips.current.rotation.y = Math.sin(ph) * 0.08 * amp;
+      const walkBob = Math.abs(Math.cos(ph)) * 0.028 - 0.014;
+      const runBob = Math.abs(Math.sin(ph)) * 0.055 - 0.05;
+      hips.current.position.y = 0.92 + (walkBob * (1 - R) + runBob * R) * amp;
+      hips.current.rotation.y = Math.sin(ph) * (0.08 + 0.05 * R) * amp;
     }
     if (spine.current) {
-      spine.current.rotation.x = (running ? 0.16 : 0.04) * amp + Math.sin(k.t * 1.7) * 0.01;
-      spine.current.rotation.y = -Math.sin(ph) * 0.1 * amp;
+      // forward lean grows with speed; lean into turns (sign follows the turn)
+      spine.current.rotation.x = (0.04 + 0.18 * R) * amp + Math.sin(k.t * 1.7) * 0.008;
+      spine.current.rotation.y = -Math.sin(ph) * (0.1 + 0.06 * R) * amp;
+      spine.current.rotation.z = clamp(-a.turnRate * v * 0.012, -0.14, 0.14);
       spine.current.scale.y = 1 + Math.sin(k.t * 2) * 0.008; // breathing
     }
-    // Arms
-    const armSwing = 0.5 * amp;
+    // Arms: relaxed swing when walking, bent pumping arms when running.
+    const armSwing = (0.45 * (1 - R) + 0.85 * R) * amp * Math.min(1, thighA / 0.4 + 0.3);
+    const elbowBase = -0.22 - (0.25 * (1 - R) + 1.35 * R) * amp;
     if (L.sh.current && L.el.current) {
-      L.sh.current.rotation.set(Math.sin(ph) * armSwing - 1.1 * k.interact + Math.sin(k.t * 2.4) * 0.12 * k.talk * 0.5, 0, 0.08);
-      L.el.current.rotation.x = -0.25 - 0.4 * amp - 0.5 * k.interact - 0.4 * k.talk * 0.5;
+      L.sh.current.rotation.set(Math.sin(ph) * armSwing - 1.1 * k.interact + Math.sin(k.t * 2.4) * 0.06 * k.talk - 0.25 * k.listen, 0, 0.08 + 0.05 * R);
+      L.el.current.rotation.x = elbowBase - 0.5 * k.interact - 0.2 * k.talk - 0.9 * k.listen;
     }
-    if (R.sh.current && R.el.current) {
+    if (R_.sh.current && R_.el.current) {
       let px = -Math.sin(ph) * armSwing - 1.1 * k.interact;
       let py = 0;
-      let elbow = -0.25 - 0.4 * amp - 0.5 * k.interact;
+      let elbow = elbowBase - 0.5 * k.interact;
       // talking gestures
       px += (-0.35 + Math.sin(k.t * 3.1) * 0.18) * k.talk * (1 - k.point);
       elbow += -0.7 * k.talk * (1 - k.point);
@@ -157,10 +183,10 @@ export function Humanoid({ outfit, anim, castShadow = true }: { outfit: Outfit; 
       }
       // beckoning wave
       px = px * (1 - k.wave) + -2.5 * k.wave;
-      const pz = -0.08 * (1 - k.wave) + (-0.25 + Math.sin(k.t * 7) * 0.3) * k.wave;
+      const pz = (-0.08 - 0.05 * R) * (1 - k.wave) + (-0.25 + Math.sin(k.t * 7) * 0.3) * k.wave;
       elbow = elbow * (1 - k.wave) - 0.5 * k.wave;
-      R.sh.current.rotation.set(px, py, pz, "YXZ");
-      R.el.current.rotation.x = elbow;
+      R_.sh.current.rotation.set(px, py, pz, "YXZ");
+      R_.el.current.rotation.x = elbow;
     }
     // Head look-at (limited)
     if (head.current) {
@@ -177,8 +203,16 @@ export function Humanoid({ outfit, anim, castShadow = true }: { outfit: Outfit; 
       head.current.rotation.y += (hy - head.current.rotation.y) * damp(6, dt);
       head.current.rotation.x += (hx - head.current.rotation.x) * damp(6, dt);
     }
-    // Fade
-    for (const m of Object.values(mats)) m.opacity = a.opacity;
+    // Fade (materials are only transparent while fading, so they sort and shade as solids otherwise)
+    const fading = a.opacity < 0.999;
+    for (const m of Object.values(mats)) {
+      m.opacity = a.opacity;
+      if (m.transparent !== fading) {
+        m.transparent = fading;
+        m.depthWrite = !fading;
+        m.needsUpdate = true;
+      }
+    }
   });
 
   const shadow = castShadow;
@@ -209,7 +243,7 @@ export function Humanoid({ outfit, anim, castShadow = true }: { outfit: Outfit; 
         <mesh geometry={geo.hips} material={mats.bottom} castShadow={shadow} />
         {outfit.skirt && <mesh geometry={geo.skirt} material={mats.bottom} castShadow={shadow} />}
         {limb(1, L)}
-        {limb(-1, R)}
+        {limb(-1, R_)}
         <group ref={spine} position={[0, 0.02, 0]}>
           <mesh geometry={geo.torso} material={mats.top} castShadow={shadow} />
           {/* blouse / shirt front */}
@@ -219,7 +253,7 @@ export function Humanoid({ outfit, anim, castShadow = true }: { outfit: Outfit; 
           {outfit.badge && <mesh geometry={geo.badge} material={mats.badge} position={[-0.09, 0.33, 0.12]} />}
           <mesh geometry={geo.collar} material={mats.skin} />
           {arm(1, L)}
-          {arm(-1, R)}
+          {arm(-1, R_)}
           <group ref={head} position={[0, 0.66, 0]}>
             <mesh geometry={geo.head} material={mats.skin} castShadow={shadow} />
             <mesh geometry={geo.hair} material={mats.hair} />

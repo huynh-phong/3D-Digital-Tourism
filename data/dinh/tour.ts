@@ -57,9 +57,9 @@ export const TOUR_STOPS: TourStop[] = [
     order: 2,
     title: { vi: "Thảm cỏ oval và sân trước", en: "Oval lawn and forecourt" },
     floor: "grounds",
-    position: [-24, 0, 116],
-    guideSpot: [-21, 0, 113],
-    lookAt: [0, 2, 70],
+    position: [-34, 0, 124],
+    guideSpot: [-30, 0, 126],
+    lookAt: [0, 2, 80],
     radius: 10,
     knowledge_ids: ["k-lawn-pond", "k-grounds-features"],
     narration: {

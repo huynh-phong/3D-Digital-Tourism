@@ -20,7 +20,8 @@ export type Action =
   | "map"
   | "help"
   | "guide"
-  | "chat";
+  | "chat"
+  | "lock";
 
 export const DEFAULT_KEYS: Record<Action, string> = {
   forward: "KeyW",
@@ -35,6 +36,7 @@ export const DEFAULT_KEYS: Record<Action, string> = {
   help: "KeyH",
   guide: "KeyG",
   chat: "Enter",
+  lock: "KeyL",
 };
 
 /** Esc is reserved for pause (browsers also use it to release pointer lock). */
@@ -107,6 +109,11 @@ export const useSettings = create<SettingsState>()(
           };
         }
       }),
+      // Older saves may miss newly added key bindings.
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<SettingsState>;
+        return { ...current, ...p, keys: { ...DEFAULT_KEYS, ...(p.keys ?? {}) } };
+      },
       // Persist data only, not the action functions.
       partialize: (s) => Object.fromEntries(Object.entries(s).filter(([, v]) => typeof v !== "function")) as Partial<SettingsState>,
     },

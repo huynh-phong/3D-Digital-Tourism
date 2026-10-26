@@ -3,6 +3,7 @@
 import { useEffect, type ReactNode } from "react";
 import { useProgress } from "@/lib/store/game";
 import { useSettings } from "@/lib/store/settings";
+import { useMediaQuery } from "@/lib/useMedia";
 
 /** Rehydrates persisted stores after mount and mirrors settings onto <html>. */
 export function Providers({ children }: { children: ReactNode }) {
@@ -45,14 +46,14 @@ export function Providers({ children }: { children: ReactNode }) {
 
 export function useReducedMotion(): boolean {
   const pref = useSettings((s) => s.reducedMotion);
-  if (pref !== null) return pref;
-  if (typeof window === "undefined") return false;
-  return matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const os = useMediaQuery("(prefers-reduced-motion: reduce)");
+  return pref ?? os;
 }
 
+/** Follows the OS live when the preference is "system". */
 export function useResolvedTheme(): "light" | "dark" {
   const theme = useSettings((s) => s.theme);
+  const osDark = useMediaQuery("(prefers-color-scheme: dark)");
   if (theme !== "system") return theme;
-  if (typeof window === "undefined") return "light";
-  return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return osDark ? "dark" : "light";
 }

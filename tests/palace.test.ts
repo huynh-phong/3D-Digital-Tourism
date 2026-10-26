@@ -3,6 +3,8 @@ import RAPIER from "@dimforge/rapier3d-compat";
 import * as THREE from "three";
 import { buildPalace } from "@/lib/dinh/palaceModel";
 import { NavGraph } from "@/lib/dinh/nav";
+import { RoutePlanner } from "@/lib/dinh/route";
+import { DEST_BY_KEY } from "@/lib/tour/destinations";
 import { INTERACTABLES, TOUR_STOPS } from "@/data/dinh/tour";
 import { floorFromY } from "@/data/dinh/layout";
 import type { Vec3 } from "@/types";
@@ -71,7 +73,7 @@ describe("physics walkthrough", () => {
     const speed = 2.5;
     let vy = 0;
     for (const wp of path) {
-      for (let i = 0; i < 60 * 30; i++) {
+      for (let i = 0; i < 60 * 60; i++) {
         const f = feet();
         const dx = wp[0] - f[0];
         const dz = wp[2] - f[2];
@@ -119,6 +121,19 @@ describe("physics walkthrough", () => {
     expect(walk(route("hall", "cabinet2")).ok).toBe(true);
     place(nav.get("gate")!.p);
     expect(walk(route("gate", "exF5e")).ok).toBe(true);
+  });
+
+  it("a capsule following planned routes reaches the destinations (gate → roof, basement, exhibits)", () => {
+    const planner = new RoutePlanner(model);
+    for (const key of ["stop:stop-roof", "stop:stop-basement", "stop:stop-cabinet", "room:b_maps", "interactable:i-f5e", "stop:stop-lawn"]) {
+      const d = DEST_BY_KEY.get(key)!;
+      place([0, 0, 138]);
+      const r = planner.plan(feet(), d.point)!;
+      const w = walk(r.points.slice(1));
+      expect(w.ok, `${key} ${JSON.stringify(w)}`).toBe(true);
+      expect(Math.hypot(w.feet[0] - d.point[0], w.feet[2] - d.point[2]), key).toBeLessThan(r.exact ? 1.5 : 10);
+      expect(Math.abs(w.feet[1] - d.point[1]), key).toBeLessThan(0.6);
+    }
   });
 
   it("cannot walk through the closed palace walls", () => {

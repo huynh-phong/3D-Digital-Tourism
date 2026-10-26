@@ -1,214 +1,201 @@
 "use client";
 
 import { useFrame, useThree } from "@react-three/fiber";
-import { CapsuleCollider, RigidBody, useRapier, type RapierRigidBody } from "@react-three/rapier";
+import { CapsuleCollider, RigidBody, type RapierRigidBody } from "@react-three/rapier";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
-import type { Collider } from "@dimforge/rapier3d-compat";
 import { STOP_BY_ID } from "@/data/dinh/tour";
 import { floorFromY } from "@/data/dinh/layout";
+import { DICTS } from "@/data/i18n";
 import { angleDelta, damp } from "@/lib/geo";
-import type { NavGraph } from "@/lib/dinh/nav";
-import { runtime, useGame, type GuideState } from "@/lib/store/game";
-import { useNarrator } from "@/lib/audio/narrator";
+import { narrator, useNarrator } from "@/lib/audio/narrator";
+import { GUIDE } from "@/lib/game/config";
+import { GuideBrain } from "@/lib/guide/brain";
+import { guideSignals } from "@/lib/guide/signals";
+import { pointAt, project, type Route, type RoutePlanner } from "@/lib/dinh/route";
+import { runtime, useGame, type GuideNotice } from "@/lib/store/game";
+import { useSettings } from "@/lib/store/settings";
+import { currentDestination } from "@/lib/tour/navigator";
+import { arriveAt, isNarrated } from "@/lib/tour/director";
 import type { Vec3 } from "@/types";
 import { Humanoid, MINH_ANH, newAnim } from "@/components/player/Humanoid";
 
-const WALK = 1.5;
-const RUN = 3.8;
 const HALF_H = 0.5;
 const RADIUS = 0.28;
 
-/** Signals from the UI (G key, stairs shortcut) to the guide. */
-export const guideSignals = { call: false, snapBehindPlayer: false };
-
 /**
- * Minh Anh — a guide that lives in the world. State machine:
- * FOLLOW · LEAD · WAIT · EXPLAIN · POINT · LISTEN · REJOIN.
+ * Minh Anh in the world. Decisions come from GuideBrain (lib/guide/brain.ts);
+ * this component plans her routes with the same planner as the visitor's
+ * directions, walks her along them (never through walls), animates her and
+ * turns brain events into speech and HUD notices.
  */
-export function GuideNPC({ nav, spawn }: { nav: NavGraph; spawn: Vec3 }) {
+export function GuideNPC({ planner, spawn }: { planner: RoutePlanner; spawn: Vec3 }) {
   const body = useRef<RapierRigidBody>(null);
   const visual = useRef<THREE.Group>(null);
+  const beacon = useRef<THREE.Mesh>(null);
   const anim = useRef(newAnim());
-  const { world, rapier } = useRapier();
   const { camera } = useThree();
   const pos = useRef(new THREE.Vector3(...spawn));
   const yaw = useRef(Math.PI);
-  const path = useRef<Vec3[]>([]);
-  const repathAt = useRef(0);
-  const lastGoal = useRef(new THREE.Vector3(1e9, 0, 0));
-  const fade = useRef(1);
-  const state = useRef<GuideState>("FOLLOW");
-  const tmp = useMemo(
-    () => ({ a: new THREE.Vector3(), b: new THREE.Vector3(), goal: new THREE.Vector3(), look: new THREE.Vector3(), point: new THREE.Vector3(), frustum: new THREE.Frustum(), m: new THREE.Matrix4() }),
-    [],
-  );
-
-  const onlyStatic = (c: Collider) => !!c.parent()?.isFixed();
-
-  /** Line of sight at chest height between two feet positions. */
-  const clear = (from: THREE.Vector3, to: THREE.Vector3) => {
-    if (Math.abs(from.y - to.y) > 0.8) return false;
-    const o = { x: from.x, y: from.y + 1.1, z: from.z };
-    const d = { x: to.x - from.x, y: to.y - from.y, z: to.z - from.z };
-    const len = Math.hypot(d.x, d.y, d.z);
-    if (len < 0.01) return true;
-    const ray = new rapier.Ray(o, { x: d.x / len, y: d.y / len, z: d.z / len });
-    const hit = world.castRay(ray, len, true, undefined, undefined, undefined, undefined, onlyStatic);
-    return !hit;
-  };
-
-  const groundAt = (x: number, y: number, z: number) => {
-    const ray = new rapier.Ray({ x, y: y + 1.2, z }, { x: 0, y: -1, z: 0 });
-    const hit = world.castRay(ray, 4, true, undefined, undefined, undefined, undefined, onlyStatic);
-    return hit ? y + 1.2 - hit.timeOfImpact : y;
-  };
-
-  const nearestVisible = (p: THREE.Vector3) => {
-    const cands = nav.nearest([p.x, p.y, p.z], undefined, 8);
-    for (const n of cands) {
-      tmp.b.set(...n.p);
-      if (clear(p, tmp.b)) return n;
-    }
-    return cands[0];
-  };
-
-  const planTo = (goal: THREE.Vector3) => {
-    const s = nearestVisible(pos.current);
-    const e = nearestVisible(goal);
-    const p = s && e ? nav.path(s.id, e.id) : null;
-    path.current = p ? [...p.map((n) => n.p), [goal.x, goal.y, goal.z]] : [[goal.x, goal.y, goal.z]];
-  };
+  const brain = useRef(new GuideBrain());
+  const nav = useRef({ route: null as Route | null, s: 0, key: "", plannedAt: -10, from: [0, 0, 0] as Vec3 });
+  const st = useRef({ fade: 1, explainAt: -1, noticeUntil: 0, notice: null as GuideNotice, reminder: 0, measured: 0 });
+  const tmp = useMemo(() => ({ look: new THREE.Vector3(), point: new THREE.Vector3(), frustum: new THREE.Frustum(), m: new THREE.Matrix4(), v: new THREE.Vector3() }), []);
 
   useFrame((frame, rawDt) => {
     const dt = Math.min(rawDt, 1 / 30);
-    const g = useGame.getState();
-    const P = tmp.a.set(...runtime.player);
-    const G = pos.current;
     const now = frame.clock.elapsedTime;
-    const distP = Math.hypot(P.x - G.x, P.z - G.z);
-    const sameFloor = floorFromY(P.y) === floorFromY(G.y);
-    const talking = useNarrator.getState().status !== "idle";
+    const g = useGame.getState();
+    if (g.phase !== "playing" && g.phase !== "paused") return;
+    const P = runtime.player;
+    const G = pos.current;
+    const k = st.current;
+    const sameFloor = floorFromY(P[1]) === floorFromY(G.y);
+    const dist = sameFloor ? Math.hypot(P[0] - G.x, P[2] - G.z) : Infinity;
+    const lang = useSettings.getState().lang;
+    const t = DICTS[lang];
+    const nar = useNarrator.getState();
+    const narrating = nar.status !== "idle";
 
-    // ---- choose state
-    let next: GuideState = g.guideState;
-    const target = g.targetStopId ? STOP_BY_ID.get(g.targetStopId) : undefined;
-    if (guideSignals.call) {
-      next = "REJOIN";
-    } else if (g.guideState === "EXPLAIN" || g.guideState === "POINT") {
-      next = g.guideState;
-    } else if (g.chatOpen && distP < 8 && sameFloor) {
-      next = "LISTEN";
-    } else if (!sameFloor || distP > 28) {
-      next = "REJOIN";
-    } else if (g.mode === "guided" && target) {
-      tmp.b.set(...target.guideSpot);
-      const atStop = G.distanceTo(tmp.b) < 1.2;
-      next = distP > 12 && !atStop ? "WAIT" : "LEAD";
-    } else {
-      next = "FOLLOW";
+    // ---- shortcut teleports (stairs): she comes along, with a notice
+    if (guideSignals.snapBehindPlayer) {
+      guideSignals.snapBehindPlayer = false;
+      const back: Vec3 = [P[0] - Math.sin(runtime.cameraYaw) * 1.8 + Math.cos(runtime.cameraYaw) * 1.1, P[1], P[2] - Math.cos(runtime.cameraYaw) * 1.8 - Math.sin(runtime.cameraYaw) * 1.1];
+      const spot = planner.freePointNear(back, 3) ?? planner.freePointNear(P, 3) ?? P;
+      G.set(spot[0], spot[1], spot[2]);
+      nav.current.route = null;
+      nav.current.key = "";
+      k.fade = 0;
+      brain.current.reset(g.guideLeading ? "LEADING" : "FOLLOWING");
+      notify("shortcut", now + 4);
     }
-    if (next !== state.current) {
-      state.current = next;
-      if (g.guideState !== next && !(g.guideState === "EXPLAIN" || g.guideState === "POINT")) useGame.setState({ guideState: next });
-    }
-    const farFromGuide = !sameFloor || distP > 22;
-    if (farFromGuide !== g.guideFar) useGame.setState({ guideFar: farFromGuide });
 
-    // ---- rejoin by re-positioning only when necessary and out of view
-    if (state.current === "REJOIN" && (guideSignals.call || distP > 60 || !sameFloor)) {
+    // ---- what is she doing?
+    const dest = currentDestination();
+    const leading = g.guideLeading && !!dest;
+    const intent = leading ? "lead" : g.mode === "free" || !dest ? "follow" : "idle";
+    const spotRaw: Vec3 | null = leading ? dest!.guideSpot : null;
+
+    // ---- her route (lead: to her spot; follow: to a point near the visitor)
+    let goal: Vec3 | null = null;
+    if (leading && spotRaw) goal = spotRaw;
+    else if (intent === "follow") {
+      const want = guideSignals.call ? 1.6 : GUIDE.followDist + 1.2;
+      if (dist > want || !sameFloor) {
+        const pf = runtime.playerYaw;
+        goal = [P[0] - Math.sin(pf) * 1.9 - Math.cos(pf) * 1.2, P[1], P[2] - Math.cos(pf) * 1.9 + Math.sin(pf) * 1.2];
+      } else guideSignals.call = false;
+    }
+    const n = nav.current;
+    const goalKey = goal ? (leading ? `lead:${dest!.key}` : "follow") : "";
+    const keyChanged = goalKey !== n.key;
+    const stale =
+      goal &&
+      (keyChanged ||
+        (leading && !n.route && now - n.plannedAt > 3) || // retry a failed plan now and then
+        (!leading && now - n.plannedAt > 0.7 && Math.hypot(goal[0] - n.from[0], goal[2] - n.from[2]) > 1.5));
+    if (goal && stale) {
+      const freeGoal = planner.freePointNear(goal, 6) ?? goal;
+      const r = planner.plan([G.x, G.y, G.z], freeGoal);
+      n.route = r;
+      n.s = 0;
+      n.key = goalKey;
+      n.plannedAt = now;
+      n.from = [...goal];
+      if (leading && keyChanged) brain.current.reset(r ? "LEADING" : "WAITING");
+    }
+    if (!goal) {
+      n.route = null;
+      n.key = "";
+    }
+    const route = n.route;
+
+    // ---- brain
+    let gap: number | null = null;
+    if (leading && route && sameFloor) {
+      const pp = project(route, P);
+      if (pp.d < 6) gap = n.s - pp.s;
+    } else if (leading && route && !sameFloor) gap = 99;
+    const atSpot = leading && !!route && route.length - n.s < 0.3;
+    const stop = dest?.kind === "stop" ? STOP_BY_ID.get(dest.id) : undefined;
+    const explainDue = g.mode === "guided" && !!stop && !isNarrated(stop.id);
+    const playerToSpot = dest && floorFromY(P[1]) === floorFromY(dest.point[1]) ? Math.hypot(P[0] - dest.point[0], P[2] - dest.point[2]) : Infinity;
+    const out = brain.current.update(dt, {
+      intent,
+      dist,
+      gap,
+      playerSpeed: runtime.playerSpeed,
+      atSpot,
+      playerToSpot,
+      explainDue,
+      narrating,
+      chatOpen: g.chatOpen,
+      hasRoute: !leading || !!route,
+    });
+
+    for (const e of out.events) {
+      if (e === "startExplain" && stop) {
+        k.explainAt = now;
+        arriveAt(stop.id, useSettings.getState().autoNarrate);
+      } else if (e === "pauseNarration") {
+        narrator?.pause();
+        notify("narrationPaused", Infinity);
+      } else if (e === "resumeNarration") {
+        narrator?.resume();
+        notify(null, 0);
+      } else if (e === "remind") {
+        const line = t.guide.reminders[k.reminder++ % t.guide.reminders.length];
+        narrator?.play(line, lang, "guide:remind", t.guide.name);
+      } else if (e === "resume") {
+        if (!narrating) narrator?.play(t.guide.resumeLines[Math.floor(now) % t.guide.resumeLines.length], lang, "guide:resume", t.guide.name);
+      } else if (e === "noRoute") notify("noRoute", now + 6);
+    }
+    // waiting notice follows the state
+    const waiting = out.state === "WAITING_FOR_PLAYER" || out.state === "REMINDING";
+    if (waiting && k.notice !== "narrationPaused") notify("waiting", Infinity);
+    else if (!waiting && k.notice === "waiting") notify(null, 0);
+    if (out.state !== "EXPLAINING" && k.notice === "narrationPaused") notify(null, 0);
+    if (k.notice && now > k.noticeUntil) notify(null, 0);
+
+    // ---- move along the route
+    let moved = 0;
+    const prev = tmp.v.copy(G);
+    if (route) {
+      let speed = 0;
+      if (leading) speed = out.state === "LEADING" || out.state === "CHECKING_DISTANCE" || out.state === "RESUMING" ? out.speed : 0;
+      else if (intent === "follow" && out.state === "FOLLOWING") speed = dist > 9 || guideSignals.call ? GUIDE.hurry : dist > GUIDE.followDist + 0.4 ? GUIDE.walk : 0;
+      n.s = Math.min(route.length, n.s + speed * dt);
+      const p = pointAt(route, n.s);
+      G.set(p[0], p[1], p[2]);
+      moved = prev.distanceTo(G) / dt;
+      if (moved > 0.05) {
+        const ahead = pointAt(route, n.s + 1);
+        const want = Math.atan2(ahead[0] - G.x, ahead[2] - G.z);
+        if (Math.hypot(ahead[0] - G.x, ahead[2] - G.z) > 0.05) yaw.current += angleDelta(yaw.current, want) * damp(8, dt);
+      }
+    }
+    // Far apart on another floor in free mode (or called from very far): rejoin out of sight.
+    if (intent === "follow" && (!sameFloor || dist > 70) && !route) {
       tmp.m.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
       tmp.frustum.setFromProjectionMatrix(tmp.m);
-      tmp.b.set(G.x, G.y + 1, G.z);
-      const visible = tmp.frustum.containsPoint(tmp.b) && sameFloor;
-      if (!visible || guideSignals.snapBehindPlayer) {
-        // place behind the player (relative to camera), on the player's level
-        const back = -1;
-        const cx = P.x + Math.sin(runtime.cameraYaw) * 2.2 * back + Math.cos(runtime.cameraYaw) * 1.2;
-        const cz = P.z + Math.cos(runtime.cameraYaw) * 2.2 * back - Math.sin(runtime.cameraYaw) * 1.2;
-        tmp.b.set(cx, P.y, cz);
-        G.copy(clear(P, tmp.b) ? tmp.b : P.clone().add(new THREE.Vector3(0.8, 0, 0.8)));
-        G.y = groundAt(G.x, P.y, G.z);
-        path.current = [];
-        fade.current = 0;
-        guideSignals.call = false;
-        guideSignals.snapBehindPlayer = false;
-        state.current = "FOLLOW";
-        useGame.setState({ guideState: "FOLLOW", guideFar: false });
-      }
-    }
-    if (guideSignals.call && distP < 6 && sameFloor) {
-      guideSignals.call = false;
-    }
-
-    // ---- goal for this state
-    let goal: THREE.Vector3 | null = null;
-    let speed = WALK;
-    const pf = runtime.playerYaw;
-    switch (state.current) {
-      case "FOLLOW": {
-        // behind-right of the player so she doesn't block the view
-        tmp.goal.set(P.x - Math.sin(pf) * 1.9 - Math.cos(pf) * 1.3, P.y, P.z - Math.cos(pf) * 1.9 + Math.sin(pf) * 1.3);
-        if (distP > 2.6 || G.distanceTo(tmp.goal) > 3.5) goal = tmp.goal;
-        if (distP > 7) speed = RUN;
-        break;
-      }
-      case "LEAD":
-      case "EXPLAIN":
-      case "POINT": {
-        if (target) {
-          tmp.goal.set(...target.guideSpot);
-          if (G.distanceTo(tmp.goal) > 0.4) goal = tmp.goal;
-          // stay a few metres ahead of the visitor while leading
-          if (state.current === "LEAD" && distP > 7) speed = 0.9;
-          if (state.current !== "LEAD") speed = WALK;
+      if (!tmp.frustum.containsPoint(tmp.point.set(G.x, G.y + 1, G.z)) || !sameFloor) {
+        const spot = planner.freePointNear([P[0] - Math.sin(runtime.playerYaw) * 2.5, P[1], P[2] - Math.cos(runtime.playerYaw) * 2.5], 3);
+        if (spot) {
+          G.set(spot[0], spot[1], spot[2]);
+          k.fade = 0;
+          n.route = null;
+          n.key = "";
         }
-        break;
-      }
-      case "REJOIN":
-        tmp.goal.copy(P);
-        goal = distP > 2.5 ? tmp.goal : null;
-        speed = RUN;
-        break;
-      case "WAIT":
-      case "LISTEN":
-        goal = null;
-        break;
-    }
-
-    // ---- move
-    let moved = 0;
-    if (goal) {
-      if (clear(G, goal) && G.distanceTo(goal) < 30) {
-        path.current = [[goal.x, goal.y, goal.z]];
-      } else if (now > repathAt.current || goal.distanceTo(lastGoal.current) > 3 || !path.current.length) {
-        planTo(goal);
-        repathAt.current = now + 0.8;
-        lastGoal.current.copy(goal);
-      }
-      const wp = path.current[0];
-      if (wp) {
-        tmp.b.set(...wp);
-        const dx = tmp.b.x - G.x, dz = tmp.b.z - G.z;
-        const d = Math.hypot(dx, dz);
-        if (d < 0.35 && path.current.length > 1) path.current.shift();
-        else if (d > 0.05) {
-          const stepLen = Math.min(d, speed * dt);
-          G.x += (dx / d) * stepLen;
-          G.z += (dz / d) * stepLen;
-          moved = stepLen / dt;
-          const want = Math.atan2(dx, dz);
-          yaw.current += angleDelta(yaw.current, want) * damp(9, dt);
-        }
-        // follow the ground (ramps, stairs)
-        const gy = groundAt(G.x, Math.max(G.y, tmp.b.y), G.z);
-        G.y += (gy - G.y) * damp(20, dt);
       }
     }
-    if (!goal || moved < 0.05) {
-      // face the visitor when idle
-      const want = Math.atan2(P.x - G.x, P.z - G.z);
-      yaw.current += angleDelta(yaw.current, want) * damp(5, dt);
+    // Facing: toward the route when walking or about to; toward the visitor otherwise.
+    const facePlayer = moved < 0.05 && out.state !== "RESUMING" && dist < 30;
+    if (facePlayer) {
+      const want = Math.atan2(P[0] - G.x, P[2] - G.z);
+      yaw.current += angleDelta(yaw.current, want) * damp(4, dt);
+    } else if (out.state === "RESUMING" && route) {
+      const ahead = pointAt(route, n.s + 1.5);
+      yaw.current += angleDelta(yaw.current, Math.atan2(ahead[0] - G.x, ahead[2] - G.z)) * damp(6, dt);
     }
 
     body.current?.setNextKinematicTranslation({ x: G.x, y: G.y + HALF_H + RADIUS, z: G.z });
@@ -218,21 +205,41 @@ export function GuideNPC({ nav, spawn }: { nav: NavGraph; spawn: Vec3 }) {
     }
     runtime.guide = [G.x, G.y, G.z];
 
+    // beacon above her head while she waits for a visitor who is far behind
+    if (beacon.current) {
+      beacon.current.visible = waiting && dist > GUIDE.waitDist;
+      beacon.current.position.y = 2.25 + Math.sin(now * 3) * 0.08;
+      beacon.current.rotation.y = now * 1.5;
+    }
+
     // ---- animation
-    fade.current = Math.min(1, fade.current + dt * 1.5);
+    k.measured += (moved - k.measured) * damp(12, dt);
+    k.fade = Math.min(1, k.fade + dt * 1.5);
     const a = anim.current;
-    a.opacity = fade.current;
-    a.speed = moved;
+    a.opacity = k.fade;
+    a.speed = k.measured;
     a.turnRate = 0;
-    tmp.look.set(P.x, P.y + 1.55, P.z);
-    a.look = tmp.look;
-    if (state.current === "POINT" && target) {
-      tmp.point.set(...target.lookAt);
+    tmp.look.set(P[0], P[1] + 1.55, P[2]);
+    a.look = dist < 25 ? tmp.look : null;
+    a.pointAt = null;
+    if (out.state === "EXPLAINING" && stop && now - k.explainAt < 6) {
+      tmp.point.set(...stop.lookAt);
       a.pointAt = tmp.point;
       a.state = "point";
-    } else {
-      a.pointAt = null;
-      a.state = moved > 0.1 ? "move" : talking && (state.current === "EXPLAIN" || distP < 10) ? "talk" : state.current === "WAIT" ? "wave" : state.current === "LISTEN" ? "listen" : "idle";
+    } else if (out.state === "EXPLAINING" || (nar.status === "speaking" && dist < 10)) a.state = "talk";
+    else if (out.state === "REMINDING") a.state = "wave";
+    else if (out.state === "LISTENING") a.state = "listen";
+    else a.state = k.measured > 0.1 ? "move" : "idle";
+
+    // ---- publish coarse state
+    const farFromGuide = g.mode === "free" && (!sameFloor || dist > 22);
+    const gapR = Math.round(dist === Infinity ? 99 : dist);
+    if (out.state !== g.guideState || farFromGuide !== g.guideFar || (waiting && gapR !== g.guideGap)) useGame.setState({ guideState: out.state, guideFar: farFromGuide, guideGap: gapR });
+
+    function notify(nt: GuideNotice, until: number) {
+      k.notice = nt;
+      k.noticeUntil = until;
+      if (useGame.getState().guideNotice !== nt) useGame.setState({ guideNotice: nt });
     }
   });
 
@@ -243,6 +250,10 @@ export function GuideNPC({ nav, spawn }: { nav: NavGraph; spawn: Vec3 }) {
       </RigidBody>
       <group ref={visual}>
         <Humanoid outfit={MINH_ANH} anim={anim} />
+        <mesh ref={beacon} visible={false}>
+          <octahedronGeometry args={[0.14, 0]} />
+          <meshBasicMaterial color="#38bdf8" />
+        </mesh>
       </group>
     </>
   );

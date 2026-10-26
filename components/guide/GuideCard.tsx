@@ -12,12 +12,14 @@ import { STOP_BY_ID } from "@/data/dinh/tour";
 import { Icon } from "@/components/ui/Icon";
 import { releasePointer } from "@/lib/game/pointer";
 import { IconButton } from "@/components/ui/primitives";
+import type { Lang } from "@/types";
 
 interface Msg {
   role: "user" | "assistant";
   content: string;
   sources?: string[];
   mode?: "ai" | "demo" | "fallback";
+  lang?: Lang;
 }
 
 export function GuideAvatar({ speaking }: { speaking: boolean }) {
@@ -64,8 +66,22 @@ export function GuideCard({ chatRef }: { chatRef: React.RefObject<HTMLInputEleme
   }, [msgs, busy]);
 
   const nextId = nextStopAfter(completed);
+  // "answered" status once the spoken answer has finished
+  const [answered, setAnswered] = useState(false);
+  useEffect(
+    () =>
+      useNarrator.subscribe((s, prev) => {
+        if (prev.key === "answer" && prev.status !== "idle" && s.status === "idle") setAnswered(true);
+        if (s.key && s.key !== "answer") setAnswered(false);
+      }),
+    [],
+  );
+
   const ask = async (question: string) => {
     if (!question.trim() || busy) return;
+    // a new turn silences the previous answer right away (never two voices at once)
+    narrator?.stop();
+    setAnswered(false);
     setErr(null);
     setBusy(true);
     setExpanded(true);
@@ -78,12 +94,16 @@ export function GuideCard({ chatRef }: { chatRef: React.RefObject<HTMLInputEleme
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question, lang, currentStopId, nextStopId: nextId, history }),
+        signal: AbortSignal.timeout(45_000),
       });
       if (res.status === 429) throw new Error("rate");
       if (!res.ok) throw new Error("http");
-      const data = (await res.json()) as { answer: string; sources: string[]; mode: Msg["mode"] };
-      setMsgs((m) => [...m, { role: "assistant", content: data.answer, sources: data.sources, mode: data.mode }]);
-      narrator?.play(data.answer, lang, "answer", t.guide.name);
+      const data = (await res.json()) as { answer: string; sources: string[]; mode: Msg["mode"]; lang?: Lang };
+      if (!data.answer?.trim()) throw new Error("empty");
+      // the text is shown first; the voice follows the answer's language (vi → HoaiMy, en → Jenny)
+      const answerLang = data.lang ?? lang;
+      setMsgs((m) => [...m, { role: "assistant", content: data.answer, sources: data.sources, mode: data.mode, lang: answerLang }]);
+      narrator?.play(data.answer, answerLang, "answer", t.guide.name);
     } catch (e) {
       setErr((e as Error).message === "rate" ? t.guide.rateLimited : t.guide.askError);
     } finally {
@@ -98,11 +118,16 @@ export function GuideCard({ chatRef }: { chatRef: React.RefObject<HTMLInputEleme
       ? t.guide.loadingVoice
       : speaking
         ? t.guide.speaking
-        : chatOpen
-          ? t.guide.listening
-          : t.guide.idle;
+        : answered
+          ? t.guide.answered
+          : chatOpen
+            ? t.guide.listening
+            : t.guide.states[guideState];
 
-  const awaitingContinue = mode === "guided" && guideState === "WAIT" && nar.status === "idle" && !!targetStopId && completed.includes(targetStopId);
+  const destination = useGame((s) => s.destination);
+  // guided tour: the stop is finished (or directions were cancelled) → offer to go on
+  const awaitingContinue =
+    mode === "guided" && nar.status === "idle" && (!destination || (guideState === "WAITING" && !!targetStopId && completed.includes(targetStopId)));
   const lastKey = nar.key;
 
   return (
@@ -130,7 +155,7 @@ export function GuideCard({ chatRef }: { chatRef: React.RefObject<HTMLInputEleme
               if (STOP_BY_ID.has(id)) playStop(id, (layer as "quick" | "main" | "deep") ?? "main");
               else {
                 const last = [...msgs].reverse().find((m) => m.role === "assistant");
-                if (last) narrator?.play(last.content, lang, "answer", t.guide.name);
+                if (last) narrator?.play(last.content, last.lang ?? lang, "answer", t.guide.name);
               }
             }}
           />
@@ -151,6 +176,7 @@ export function GuideCard({ chatRef }: { chatRef: React.RefObject<HTMLInputEleme
           </p>
         ) : null}
         {nar.notice === "no_voice" && voiceEnabled && <p className="mt-1 text-[11px] text-amber">{t.guide.noViVoice}</p>}
+        {nar.notice === "voice_fallback" && voiceEnabled && <p className="mt-1 text-[11px] text-amber">{t.guide.voiceFallback}</p>}
       </div>
 
       {awaitingContinue && (

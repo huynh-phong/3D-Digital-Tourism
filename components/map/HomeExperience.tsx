@@ -4,8 +4,10 @@ import { AnimatePresence, motion } from "framer-motion";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useVisitKey } from "@/lib/useVisitKey";
 import { useMediaQuery } from "@/lib/useMedia";
+import { loadCityData, mapView } from "@/lib/city/useCityBuild";
 import { LANDMARKS } from "@/data/landmarks";
 import { FACT_BY_ID } from "@/data/dinh/sources";
 import { loc, useLang, useT } from "@/lib/i18n";
@@ -42,11 +44,14 @@ export function HomeExperience() {
   const listOpen = listPref ?? !small;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  const visit = useVisitKey();
+  // This page is kept alive (hidden) while the tour runs: clear transient
+  // state when it's hidden so coming back never shows the "entering" veil.
+  useLayoutEffect(() => () => setLeaving(false), []);
   const touch = useMediaQuery("(pointer: coarse)");
 
   const fetchCity = useCallback(() => {
-    fetch("/data/city.json")
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+    loadCityData()
       .then((data: CityData) => setLoad({ state: "ready", data }))
       .catch(() => setLoad({ state: "error" }));
   }, []);
@@ -63,7 +68,9 @@ export function HomeExperience() {
   }, []);
 
   const startTour = async () => {
+    if (leaving) return; // one tour session at a time
     setLeaving(true);
+    mapView.returningFromTour = true;
     await scene.current?.dive();
     router.push("/dinh-doc-lap");
   };
@@ -77,6 +84,7 @@ export function HomeExperience() {
         {load.state === "ready" && (
           <div className="absolute inset-0">
             <CityScene
+              key={visit}
               ref={scene}
               data={load.data}
               dark={dark}
@@ -85,7 +93,7 @@ export function HomeExperience() {
               markerEls={markerEls}
               onReady={onReady}
             />
-            <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-label={t.map.landmarks}>
+            <div className={`pointer-events-none absolute inset-0 isolate z-0 overflow-hidden transition-opacity ${built ? "opacity-100" : "opacity-0"}`} aria-label={t.map.landmarks}>
               {LANDMARKS.map((l) => {
                 const available = l.status === "available";
                 return (

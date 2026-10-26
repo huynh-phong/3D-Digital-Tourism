@@ -6,8 +6,17 @@ import { narrator, useNarrator } from "@/lib/audio/narrator";
 import { nextStopAfter } from "@/lib/knowledge/retrieve";
 import { runtime, useGame, useProgress, type TourMode } from "@/lib/store/game";
 import { useSettings } from "@/lib/store/settings";
-import { guideSignals } from "@/components/guide/GuideNPC";
+import { guideSignals } from "@/lib/guide/signals";
 import type { Vec3 } from "@/types";
+import { DEST_BY_KEY, destKey } from "./destinations";
+import { setDestination } from "./navigator";
+
+/**
+ * Tour flow. One destination drives everything: the route line, the glowing
+ * marker and — when she leads — Minh Anh (see components/guide/GuideNPC).
+ * In the guided tour the destination is the next stop; in free exploration
+ * it is whatever the visitor picked, and Minh Anh leads only when asked.
+ */
 
 /** Stair shortcuts (fade-teleport) at each end of the two shafts. */
 const sb = STAIRS[0], sr = STAIRS[1];
@@ -24,26 +33,24 @@ const narrated = new Set<string>();
 export function resetNarrated() {
   narrated.clear();
 }
+export const isNarrated = (id: string) => narrated.has(id);
 
 const same = (a: Vec3, b: Vec3) => floorFromY(a[1]) === floorFromY(b[1]);
 const d2 = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[2] - b[2]);
 
-/** Called ~6×/s from the scene: proximity, arrival, auto-narration. */
+/** Called ~6×/s from the scene: current room / stop / nearby interaction for the HUD. */
 export function tickProximity() {
   const g = useGame.getState();
   if (g.phase !== "playing") return;
   const P = runtime.player;
 
-  // Floor / room for the HUD
   const floor = floorFromY(P[1]);
   const room = ROOMS.find((r) => r.floor === floor && P[0] >= r.rect.x0 && P[0] <= r.rect.x1 && P[2] >= r.rect.z0 && P[2] <= r.rect.z1)?.id ?? null;
   if (floor !== g.floor || room !== g.room) useGame.setState({ floor, room });
 
-  // Current stop
   const stop = TOUR_STOPS.find((s) => same(s.position, P) && d2(s.position, P) < s.radius);
   const currentStopId = stop?.id ?? null;
 
-  // Nearest interaction
   let nearby: typeof g.nearby = null;
   let best = Infinity;
   for (const i of INTERACTABLES) {
@@ -60,23 +67,14 @@ export function tickProximity() {
   if (currentStopId !== g.currentStopId || JSON.stringify(nearby) !== JSON.stringify(g.nearby)) {
     useGame.setState({ currentStopId, nearby });
   }
-
-  // Arrival at the guided target
-  if (stop && g.mode === "guided" && g.targetStopId === stop.id && !narrated.has(stop.id) && g.guideState !== "EXPLAIN" && g.guideState !== "POINT") {
-    const fast = runtime.playerSpeed > 3.2;
-    if (!fast) arriveAt(stop.id, useSettings.getState().autoNarrate);
-  }
 }
 
-/** Mark complete, then narrate (or just prompt) and let the guide explain. */
+/** Minh Anh reached the stop with the visitor beside her: mark complete, then narrate (or just open the card). */
 export function arriveAt(stopId: string, narrate: boolean) {
   narrated.add(stopId);
   useProgress.getState().complete(stopId);
-  if (narrate) {
-    playStop(stopId, "main");
-  } else {
-    useGame.setState({ guideState: "WAIT", panel: { kind: "stop", id: stopId } });
-  }
+  if (narrate) playStop(stopId, "main");
+  else useGame.setState({ panel: { kind: "stop", id: stopId } });
 }
 
 export function playStop(stopId: string, layer: "quick" | "main" | "deep") {
@@ -84,20 +82,14 @@ export function playStop(stopId: string, layer: "quick" | "main" | "deep") {
   if (!stop) return;
   const lang = useSettings.getState().lang;
   const text = layer === "main" ? `${stop.narration.quick[lang]} ${stop.narration.main[lang]}` : stop.narration[layer][lang];
-  useGame.setState({ guideState: "POINT", targetStopId: stopId });
   narrator?.play(text, lang, `${stopId}:${layer}`, stop.title[lang]);
-  // Point for the opening sentences, then talk.
-  setTimeout(() => {
-    if (useGame.getState().guideState === "POINT") useGame.setState({ guideState: "EXPLAIN" });
-  }, 6000);
 }
 
-/** When narration ends during EXPLAIN, wait for the visitor to continue. */
+/** When the tour is finished and the last narration ends, show the completion card. */
 export function watchNarrationEnd() {
   return useNarrator.subscribe((s, prev) => {
     if (prev.status !== "idle" && s.status === "idle") {
       const g = useGame.getState();
-      if (g.guideState === "EXPLAIN" || g.guideState === "POINT") useGame.setState({ guideState: "WAIT" });
       const done = useProgress.getState().completed;
       if (g.mode === "guided" && TOUR_STOPS.every((t) => done.includes(t.id)) && !g.panel) {
         useGame.setState({ panel: { kind: "complete" } });
@@ -111,24 +103,56 @@ export function continueTour() {
   const next = nextStopAfter(useProgress.getState().completed);
   narrator?.stop();
   if (!next) {
-    useGame.setState({ targetStopId: null, guideState: "FOLLOW", panel: { kind: "complete" } });
+    useGame.setState({ targetStopId: null, panel: { kind: "complete" }, guideLeading: false });
+    setDestination(null);
     return;
   }
-  useGame.setState({ targetStopId: next, guideState: "LEAD", panel: null });
+  useGame.setState({ targetStopId: next, panel: null });
+  setDestination(destKey("stop", next), true);
 }
 
+/** "Directions" to a tour stop (stop list, floor map). Minh Anh leads in the guided tour. */
 export function goToStop(stopId: string) {
   narrator?.stop();
-  useGame.setState({ mode: "guided", targetStopId: stopId, guideState: "LEAD" });
+  const g = useGame.getState();
+  if (g.mode === "guided") {
+    useGame.setState({ targetStopId: stopId });
+    setDestination(destKey("stop", stopId), true);
+  } else {
+    setDestination(destKey("stop", stopId), false);
+  }
+}
+
+/** Directions to any destination key (stop, exhibit, room). */
+export function navigateTo(key: string) {
+  const d = DEST_BY_KEY.get(key);
+  if (!d) return;
+  if (d.kind === "stop") return goToStop(d.id);
+  const g = useGame.getState();
+  // A detour during the guided tour: Minh Anh takes you there, then the tour can resume.
+  if (g.mode === "guided") narrator?.stop();
+  setDestination(key, g.mode === "guided");
+}
+
+export function askGuideToLead() {
+  const k = useGame.getState().destination;
+  if (k) setDestination(k, true);
+}
+
+export function cancelNavigation() {
+  setDestination(null);
+  useGame.setState({ guideLeading: false });
 }
 
 export function setMode(mode: TourMode) {
   narrator?.stop();
   if (mode === "guided") {
     const next = nextStopAfter(useProgress.getState().completed) ?? TOUR_STOPS[0].id;
-    useGame.setState({ mode, targetStopId: next, guideState: "LEAD" });
+    useGame.setState({ mode, targetStopId: next });
+    setDestination(destKey("stop", next), true);
   } else {
-    useGame.setState({ mode, targetStopId: null, guideState: "FOLLOW" });
+    useGame.setState({ mode, targetStopId: null, guideLeading: false });
+    setDestination(null);
   }
 }
 
@@ -147,6 +171,7 @@ export function interact() {
   } else if (n.kind === "interactable") {
     useGame.setState({ panel: { kind: "interactable", id: n.id } });
   } else {
+    narrated.add(n.id);
     useProgress.getState().complete(n.id);
     useGame.setState({ panel: { kind: "stop", id: n.id } });
     playStop(n.id, "main");
@@ -157,7 +182,6 @@ export function takeStairs(id: "stair-roof" | "stair-basement", dir: "up" | "dow
   const s = STAIR_POINTS.find((p) => p.id === id && p.dir === dir);
   if (!s) return;
   useGame.getState().requestTeleport(s.to, s.yaw);
-  guideSignals.call = true;
   guideSignals.snapBehindPlayer = true;
   useGame.setState({ panel: null });
 }

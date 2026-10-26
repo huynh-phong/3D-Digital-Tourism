@@ -31,7 +31,7 @@ export const MEASURES = {
   rearWingDepth: e(52, "Estimated."),
   storeyHeight: e(5, "3 tầng lầu + tầng nền + sân thượng (verified count) distributed over 26 m; equal 5 m storeys are an estimate."),
   plinthHeight: e(1.5, "Estimated raise of the ground floor above the forecourt."),
-  lawnCenterZ: e(70, "Distance gate → lawn → palace estimated from the official visitor map (schematic)."),
+  lawnCenterZ: e(80, "Distance gate → lawn → palace estimated from the official visitor map (schematic); placed so the ring drive clears the half-moon pond."),
   palaceFrontZ: e(-10, "Estimated."),
   gateWidth: e(14, "Estimated."),
   octagonHouseDiameter: v(4, "Nhà bát giác đường kính 4 m — dinhdoclap.gov.vn/kien-truc."),

@@ -1,19 +1,20 @@
 "use client";
 
-import { CameraControls, Sky } from "@react-three/drei";
+import { CameraControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { LANDMARKS, project } from "@/data/landmarks";
-import { buildCity, CITY_BOUNDS, type CityBuild } from "@/lib/city/buildCity";
+import { CITY_BOUNDS, type CityBuild, type Tree } from "@/lib/city/buildCity";
+import { mapView, useCityBuild } from "@/lib/city/useCityBuild";
 import { footprintFrame, type Frame } from "@/lib/city/footprint";
-import { makeFacadeTextures } from "@/lib/city/textures";
 import type { CityData, P2 } from "@/lib/city/types";
 import { GROUNDS } from "@/data/dinh/layout";
 import { rng } from "@/lib/geo";
 import type { Landmark } from "@/types";
 import { Cathedral, CityHall, Market, PalaceMini, PostOffice, Theatre, Tower } from "./LandmarkModels";
-import { Pedestrians, Traffic } from "./Traffic";
+import { LivingCity } from "./LivingCity";
+import { CityBuildings, CityGround, CitySun, CityTrees } from "./CityLayers";
 
 export interface CitySceneHandle {
   reset: (smooth?: boolean) => void;
@@ -53,12 +54,14 @@ export const CityScene = forwardRef<CitySceneHandle, Props>(function CityScene(p
   const { quality } = props;
   return (
     <Canvas
-      shadows={false}
+      shadows={quality !== "low"}
       dpr={quality === "low" ? 1 : [1, 1.75]}
       gl={{ antialias: quality !== "low", powerPreference: "high-performance" }}
-      camera={{ fov: 42, near: 2, far: 9000, position: [...HOME.pos] }}
+      camera={{ fov: 42, near: 5, far: 9000, position: [...HOME.pos] }}
       onCreated={({ gl }) => {
-        gl.toneMapping = THREE.ACESFilmicToneMapping;
+        // Neutral keeps the saturated "miniature city" palette (ACES washes it out).
+        gl.toneMapping = THREE.NeutralToneMapping;
+        gl.toneMappingExposure = 1.05;
       }}
     >
       <CityContent {...props} handleRef={ref} />
@@ -81,32 +84,25 @@ function CityContent({
     return m;
   }, [data]);
 
-  const city = useMemo(() => {
-    const exclusions = LANDMARKS.filter((l) => !["street", "riverside"].includes(l.kind)).map((l) => {
-      const p = landmarkPos.get(l.id)!;
-      return { x: p.x, z: p.z, r: l.kind === "palace" ? 60 : 45 };
-    });
-    return buildCity(data, exclusions, [groundsPolygon()], quality);
-  }, [data, landmarkPos, quality]);
+  const exclusions = useMemo(
+    () =>
+      LANDMARKS.filter((l) => !["street", "riverside"].includes(l.kind)).map((l) => {
+        const p = landmarkPos.get(l.id)!;
+        return { x: p.x, z: p.z, r: l.kind === "palace" ? 60 : 45 };
+      }),
+    [landmarkPos],
+  );
+  const zones = useMemo(() => [groundsPolygon()], []);
+  // Built in a Web Worker; null while building (the loading screen stays up).
+  const city = useCityBuild(data, exclusions, zones, quality);
 
   useEffect(() => {
-    onReady(city.stats);
+    if (city) onReady(city.stats);
   }, [city, onReady]);
-
-  useEffect(
-    () => () => {
-      // Free GPU memory when leaving the map.
-      for (const g of [city.buildings, city.generic, city.roads, city.markings, city.water, city.green]) g.dispose();
-    },
-    [city],
-  );
-
-  const tex = useMemo(() => makeFacadeTextures(), []);
-  useEffect(() => () => { tex.map.dispose(); tex.emissive.dispose(); }, [tex]);
 
   // Trees inside the palace grounds (outside the lawn, buildings and paths).
   const groundsTrees = useMemo(() => {
-    const out: { x: number; z: number; s: number }[] = [];
+    const out: Tree[] = [];
     const R = rng(11);
     const c = Math.cos(PALACE_ROT), s = Math.sin(PALACE_ROT);
     for (let i = 0; i < 260; i++) {
@@ -115,7 +111,7 @@ function CityContent({
       if (dl < GROUNDS.ringRadius + 10) continue;
       if (Math.abs(lx) < 60 && lz > -100 && lz < 20) continue; // palace
       if (Math.abs(lx) < 12 && lz > 100) continue; // gate drive
-      out.push({ x: lx * c + lz * s, z: -lx * s + lz * c, s: 1 + R() * 0.8 });
+      out.push({ x: lx * c + lz * s, z: -lx * s + lz * c, s: 1 + R() * 0.6, k: R() < 0.35 ? 1 : 0 });
     }
     return out;
   }, []);
@@ -146,14 +142,38 @@ function CityContent({
     if (!c) return;
     c.setBoundary(new THREE.Box3(new THREE.Vector3(CITY_BOUNDS.x0, 0, CITY_BOUNDS.z0), new THREE.Vector3(CITY_BOUNDS.x1, 400, CITY_BOUNDS.z1)));
     c.boundaryEnclosesCamera = false;
-    void c.setLookAt(...HOME.pos, ...HOME.target, false);
+    if (process.env.NODE_ENV !== "production") (window as unknown as Record<string, unknown>).__sg3dMap = { controls: c };
+    if (mapView.returningFromTour) {
+      // Coming back from the palace: start at the gate where we dived in, then pull back.
+      mapView.returningFromTour = false;
+      const p = landmarkPos.get("dinh-doc-lap")!;
+      const gx = p.x + Math.sin(PALACE_ROT) * 170, gz = p.z + Math.cos(PALACE_ROT) * 170;
+      void c.setLookAt(gx + 30, 30, gz - 30, p.x, 12, p.z, false).then(() =>
+        c.setLookAt(p.x + 520 * 0.75, 330, p.z + 520 * 0.25, p.x, 10, p.z, !reducedMotion),
+      );
+    } else void c.setLookAt(...HOME.pos, ...HOME.target, false);
+    // run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    scene.fog = new THREE.Fog(dark ? "#1a2233" : "#dfe6ea", 1800, 5200);
+    scene.fog = new THREE.Fog(dark ? "#1a2233" : "#cfe8f5", 2600, 7500);
   }, [dark, scene]);
 
-  const vehicleCount = quality === "low" ? 140 : quality === "medium" ? 320 : 560;
+  const shadows = quality !== "low";
+  const origin = landmarkPos.get("dinh-doc-lap")!;
+  // Visitors stroll around the palace lawn (ring drive), in city coordinates.
+  const palaceSpaces = useMemo(() => {
+    const c = Math.cos(PALACE_ROT), s = Math.sin(PALACE_ROT);
+    const pts: P2[] = [];
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2;
+      const lx = GROUNDS.lawnCenter[0] + Math.cos(a) * GROUNDS.ringRadius, lz = GROUNDS.lawnCenter[1] + Math.sin(a) * GROUNDS.ringRadius;
+      pts.push([origin.x + lx * c + lz * s, origin.z - lx * s + lz * c]);
+    }
+    return [{ kind: "plaza" as const, pts, links: pts.map((_, i) => [(i + 1) % pts.length, (i + pts.length - 1) % pts.length]) }];
+  }, [origin]);
+  const allTrees = useMemo(() => [...(city?.trees ?? []), ...groundsTrees.map((t) => ({ ...t, x: t.x + origin.x, z: t.z + origin.z }))], [city, groundsTrees, origin]);
 
   return (
     <>
@@ -167,53 +187,24 @@ function CityContent({
         dollySpeed={0.6}
         smoothTime={reducedMotion ? 0.05 : 0.6}
       />
-      {dark ? <color attach="background" args={["#141c2b"]} /> : <Sky sunPosition={[400, 260, 600]} turbidity={6} rayleigh={1.4} />}
-      <hemisphereLight args={[dark ? "#3a4a6e" : "#dfeeff", dark ? "#1a1a14" : "#b9a98a", dark ? 0.55 : 1.1]} />
-      <directionalLight position={[-600, 900, 500]} intensity={dark ? 0.35 : 2.0} color={dark ? "#9db4ff" : "#fff4e0"} />
-      <ambientLight intensity={dark ? 0.25 : 0.25} />
+      <color attach="background" args={[dark ? "#141c2b" : "#bfe3f6"]} />
+      <hemisphereLight args={[dark ? "#3a4a6e" : "#ffffff", dark ? "#1a1a14" : "#c9b48a", dark ? 0.55 : 1.35]} />
+      <ambientLight intensity={dark ? 0.25 : 0.4} />
+      <CitySun dark={dark} shadows={shadows} quality={quality} controls={controls} />
 
       {/* ground */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[(CITY_BOUNDS.x0 + CITY_BOUNDS.x1) / 2, -0.05, (CITY_BOUNDS.z0 + CITY_BOUNDS.z1) / 2]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[(CITY_BOUNDS.x0 + CITY_BOUNDS.x1) / 2, -0.05, (CITY_BOUNDS.z0 + CITY_BOUNDS.z1) / 2]} receiveShadow={shadows}>
         <planeGeometry args={[CITY_BOUNDS.x1 - CITY_BOUNDS.x0 + 3000, CITY_BOUNDS.z1 - CITY_BOUNDS.z0 + 3000]} />
-        <meshStandardMaterial color={dark ? "#2b302c" : "#d8d2c2"} roughness={1} />
+        <meshStandardMaterial color={dark ? "#2b302c" : "#ebe3cf"} roughness={1} />
       </mesh>
-      <mesh geometry={city.water}>
-        <meshStandardMaterial vertexColors roughness={0.15} metalness={0.25} color={dark ? "#4a6b8a" : "#ffffff"} />
-      </mesh>
-      <mesh geometry={city.green}>
-        <meshStandardMaterial vertexColors roughness={1} color={dark ? "#6a8a66" : "#ffffff"} />
-      </mesh>
-      <mesh geometry={city.roads}>
-        <meshStandardMaterial vertexColors roughness={0.95} color={dark ? "#9a9a9a" : "#ffffff"} />
-      </mesh>
-      <mesh geometry={city.markings}>
-        <meshBasicMaterial vertexColors toneMapped={false} color={dark ? "#bbbbbb" : "#ffffff"} />
-      </mesh>
-      <mesh geometry={city.buildings}>
-        <meshStandardMaterial
-          vertexColors
-          map={tex.map}
-          emissiveMap={tex.emissive}
-          emissive={dark ? "#ffcf88" : "#000000"}
-          emissiveIntensity={dark ? 1.1 : 0}
-          roughness={0.85}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
-      <mesh geometry={city.generic}>
-        <meshStandardMaterial
-          vertexColors
-          map={tex.map}
-          emissiveMap={tex.emissive}
-          emissive={dark ? "#ffc070" : "#000000"}
-          emissiveIntensity={dark ? 0.9 : 0}
-          roughness={0.9}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
-      <Trees trees={city.trees} extra={groundsTrees} origin={landmarkPos.get("dinh-doc-lap")!} dark={dark} />
-      <Traffic lanes={city.lanes} count={vehicleCount} paused={false} />
-      {quality !== "low" && <Pedestrians walkways={city.walkways} count={quality === "high" ? 220 : 120} />}
+      {city && (
+        <>
+          <CityGround city={city} dark={dark} shadows={shadows} />
+          <CityBuildings city={city} dark={dark} shadows={shadows} controls={controls} />
+          <CityTrees trees={allTrees} dark={dark} shadows={shadows} />
+        </>
+      )}
+      {city && <LivingCity city={city} quality={quality} controls={controls} extraSpaces={palaceSpaces} shadows={shadows} />}
 
       {/* landmarks */}
       {LANDMARKS.map((l) => {
@@ -235,44 +226,6 @@ function CityContent({
       })}
       <MarkerProjector positions={landmarkPos} els={markerEls} />
     </>
-  );
-}
-
-function Trees({ trees, extra, origin, dark }: { trees: { x: number; z: number; s: number }[]; extra: { x: number; z: number; s: number }[]; origin: { x: number; z: number }; dark: boolean }) {
-  const all = useMemo(() => [...trees, ...extra.map((t) => ({ x: t.x + origin.x, z: t.z + origin.z, s: t.s }))], [trees, extra, origin]);
-  const trunk = useRef<THREE.InstancedMesh>(null);
-  const crown = useRef<THREE.InstancedMesh>(null);
-  const geos = useMemo(() => {
-    const t = new THREE.CylinderGeometry(0.35, 0.5, 4, 5);
-    t.translate(0, 2, 0);
-    const c = new THREE.IcosahedronGeometry(3.6, 0);
-    c.translate(0, 6.2, 0);
-    return { t, c };
-  }, []);
-  useEffect(() => {
-    const o = new THREE.Object3D();
-    const col = new THREE.Color();
-    all.forEach((tr, i) => {
-      o.position.set(tr.x, 0, tr.z);
-      o.scale.setScalar(tr.s);
-      o.rotation.set(0, (i * 1.7) % 6.28, 0);
-      o.updateMatrix();
-      trunk.current?.setMatrixAt(i, o.matrix);
-      crown.current?.setMatrixAt(i, o.matrix);
-      crown.current?.setColorAt(i, col.setHSL(0.27 + ((i * 37) % 10) / 160, 0.42, 0.33 + ((i * 13) % 10) / 90));
-    });
-    for (const m of [trunk.current, crown.current]) if (m) { m.instanceMatrix.needsUpdate = true; m.computeBoundingSphere(); }
-    if (crown.current?.instanceColor) crown.current.instanceColor.needsUpdate = true;
-  }, [all]);
-  return (
-    <group>
-      <instancedMesh ref={trunk} args={[geos.t, undefined, all.length]}>
-        <meshStandardMaterial color="#6b4f36" roughness={1} />
-      </instancedMesh>
-      <instancedMesh ref={crown} args={[geos.c, undefined, all.length]}>
-        <meshStandardMaterial roughness={0.95} flatShading color={dark ? "#9fb59a" : "#ffffff"} />
-      </instancedMesh>
-    </group>
   );
 }
 

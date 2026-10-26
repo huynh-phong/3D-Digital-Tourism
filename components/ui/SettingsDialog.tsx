@@ -6,7 +6,7 @@ import { useT } from "@/lib/i18n";
 import { keyLabel, useSettings, type Action, type Quality, type VoiceMode } from "@/lib/store/settings";
 import { Modal, Segmented, Slider, Toggle } from "./primitives";
 
-const ACTIONS: Action[] = ["forward", "back", "left", "right", "run", "interact", "camera", "jump", "map", "help", "guide", "chat"];
+const ACTIONS: Action[] = ["forward", "back", "left", "right", "run", "interact", "camera", "jump", "map", "help", "guide", "chat", "lock"];
 
 export function SettingsBody() {
   const t = useT();
@@ -41,6 +41,7 @@ export function SettingsBody() {
     help: t.controls.help,
     guide: t.controls.guide,
     chat: t.controls.chat,
+    lock: t.controls.lock,
   };
 
   return (

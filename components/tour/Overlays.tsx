@@ -67,6 +67,7 @@ export function ControlsGrid({ compact = false }: { compact?: boolean }) {
   const rows: [string, string][] = [
     [`${keyLabel(k.forward)} ${keyLabel(k.left)} ${keyLabel(k.back)} ${keyLabel(k.right)}`, t.controls.move],
     [compact ? "🖱" : "Mouse", t.controls.look],
+    [keyLabel(k.lock), t.controls.lock],
     [keyLabel(k.run), t.controls.run],
     [keyLabel(k.interact), t.controls.interact],
     [keyLabel(k.camera), t.controls.camera],
