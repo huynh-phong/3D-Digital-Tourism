@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { clientKey, rateLimit } from "@/lib/server/rateLimit";
-import { getTtsProvider } from "@/lib/server/tts";
+import { getTtsProvider, TtsError } from "@/lib/server/tts";
 
 const Body = z.object({
   text: z.string().trim().min(1).max(600),
@@ -23,9 +23,16 @@ export async function GET(req: Request) {
     const body = provider.stream ? await provider.stream(text, lang) : await provider.synthesize(text, lang);
     return new Response(body, { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "private, max-age=86400" } });
   } catch (err) {
-    console.error("[tts] provider failed:", err instanceof Error ? err.message : err);
-    return Response.json({ error: "tts_failed" }, { status: 502 });
+    return failure(err);
   }
+}
+
+/** Short reason for the client (no secrets, no upstream bodies). */
+function failure(err: unknown) {
+  const reason = err instanceof TtsError ? err.reason : "upstream";
+  console.error("[tts] provider failed:", reason);
+  const status = reason === "voice_not_configured" ? 501 : reason === "rate_limited" || reason === "busy" ? 429 : 502;
+  return Response.json({ error: "tts_failed", reason }, { status });
 }
 
 export async function POST(req: Request) {
@@ -45,7 +52,6 @@ export async function POST(req: Request) {
       headers: { "Content-Type": "audio/mpeg", "Cache-Control": "public, max-age=86400" },
     });
   } catch (err) {
-    console.error("[tts] provider failed:", err instanceof Error ? err.message : err);
-    return Response.json({ error: "tts_failed" }, { status: 502 });
+    return failure(err);
   }
 }

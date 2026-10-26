@@ -1,19 +1,27 @@
 import "server-only";
-import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import path from "node:path";
 import type { Lang } from "@/types";
+import { directSpeech, stripTags } from "./expressive";
 
 /**
- * TTS adapter. Configure ONE provider via env (see .env.example).
+ * TTS adapter. ElevenLabs is the default when ELEVENLABS_API_KEY is set;
+ * Azure / Google remain available via TTS_PROVIDER.
  * Voice names are configurable because availability changes over time —
  * verify them against the provider's current voice list when deploying.
  */
+/** Error with a short, non-secret reason the route can report. */
+export class TtsError extends Error {
+  constructor(public reason: "voice_not_configured" | "invalid_key" | "quota" | "rate_limited" | "timeout" | "network" | "upstream" | "busy") {
+    super(reason);
+  }
+}
+
 export interface TtsProvider {
   name: string;
   synthesize(text: string, lang: Lang): Promise<ArrayBuffer>;
   /** progressive audio, when the provider can produce it */
   stream?(text: string, lang: Lang): Promise<ReadableStream<Uint8Array>>;
+  /** whether a voice is configured for this language (default: yes) */
+  hasVoice?(lang: Lang): boolean;
 }
 
 const escapeXml = (s: string) =>
@@ -67,112 +75,114 @@ class GoogleTts implements TtsProvider {
   }
 }
 
+/** Azure / Google voice names (ElevenLabs uses its own voice IDs). */
 const voiceFor = (lang: Lang) => (lang === "vi" ? process.env.TTS_VOICE_VI || "vi-VN-HoaiMyNeural" : process.env.TTS_VOICE_EN || "en-US-JennyNeural");
 
 /**
- * Free voices via the Python `edge-tts` library (Microsoft Edge Read Aloud, no
- * API key). Runs server/edge_tts_stdio.py: text in on stdin, MP3 out on
- * stdout — no temp files. Needs Python with `pip install -r requirements.txt`
- * and Internet access; on failure the route answers 502 and the browser falls
- * back to its own voice / subtitles.
+ * ElevenLabs (official REST API, streaming endpoint). The key is sent only in
+ * the `xi-api-key` header from the server.
+ *
+ * - Vietnamese: voice ELEVENLABS_VOICE_ID_VI ("Trang"), model eleven_v3 with
+ *   selective audio tags (see expressive.ts) for natural emphasis.
+ * - English: voice ELEVENLABS_VOICE_ID_EN, eleven_flash_v2_5 (lowest latency),
+ *   plain text — no expressive tags.
+ * A missing voice ID is an error, never a silent substitute voice.
  */
-class EdgeTts implements TtsProvider {
-  name = "edge";
+class ElevenLabsTts implements TtsProvider {
+  name = "elevenlabs";
+  private static cache = new Map<string, ArrayBuffer>(); // repeated tour sentences
   private static running = 0;
-  private static cache = new Map<string, ArrayBuffer>(); // tour sentences repeat; keep a few in memory
-  private python = resolvePython();
-  private script = path.join(process.cwd(), "server", "edge_tts_stdio.py");
+  private key = (process.env.ELEVENLABS_API_KEY ?? "").trim();
 
-  async synthesize(text: string, lang: Lang) {
-    const stream = await this.stream(text, lang);
-    const buf = Buffer.from(await new Response(stream).arrayBuffer());
-    return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+  private cfg(lang: Lang) {
+    return lang === "vi"
+      ? { voice: process.env.ELEVENLABS_VOICE_ID_VI?.trim(), model: process.env.ELEVENLABS_MODEL_VI || "eleven_v3", tags: true }
+      : { voice: process.env.ELEVENLABS_VOICE_ID_EN?.trim(), model: process.env.ELEVENLABS_MODEL_EN || "eleven_flash_v2_5", tags: false };
   }
 
-  /**
-   * MP3 as it is generated (the service speaks roughly in real time, so a
-   * long sentence would otherwise make the visitor wait). Resolves once the
-   * first audio bytes arrive — or rejects, so the route can answer 502 and the
-   * browser falls back to its own voice.
-   */
-  stream(text: string, lang: Lang): Promise<ReadableStream<Uint8Array>> {
-    const voice = voiceFor(lang);
-    const key = `${voice}|${text}`;
-    const hit = EdgeTts.cache.get(key);
-    if (hit) return Promise.resolve(new Blob([hit]).stream());
-    if (EdgeTts.running >= 4) return Promise.reject(new Error("edge busy")); // bound concurrent child processes
-    EdgeTts.running++;
+  hasVoice(lang: Lang) {
+    return !!this.cfg(lang).voice;
+  }
 
-    return new Promise((resolve, reject) => {
-      const child = spawn(this.python, [this.script], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
-      const chunks: Buffer[] = [];
-      let err = "";
-      let started = false;
-      let done = false;
-      let ctrl: ReadableStreamDefaultController<Uint8Array> | null = null;
-      const finish = () => {
-        if (done) return;
+  async synthesize(text: string, lang: Lang) {
+    return new Response(await this.stream(text, lang)).arrayBuffer();
+  }
+
+  async stream(text: string, lang: Lang): Promise<ReadableStream<Uint8Array>> {
+    const { voice, model, tags } = this.cfg(lang);
+    if (!voice || !/^[A-Za-z0-9]{10,40}$/.test(voice)) throw new TtsError("voice_not_configured");
+    // what is spoken: tags only for models that support them; what is shown is never changed
+    const spoken = tags && model === "eleven_v3" ? directSpeech(text) : stripTags(text);
+    const key = `${voice}|${model}|${spoken}`;
+    const hit = ElevenLabsTts.cache.get(key);
+    if (hit) return new Blob([hit]).stream();
+    if (ElevenLabsTts.running >= 6) throw new TtsError("busy");
+
+    let res: Response;
+    try {
+      res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice}/stream?output_format=mp3_44100_64`, {
+        method: "POST",
+        headers: { "xi-api-key": this.key, "Content-Type": "application/json", Accept: "audio/mpeg" },
+        body: JSON.stringify({ text: spoken, model_id: model, ...(model === "eleven_v3" ? {} : { language_code: lang }) }),
+        signal: AbortSignal.timeout(20_000),
+      });
+    } catch (e) {
+      throw new TtsError((e as Error).name === "TimeoutError" ? "timeout" : "network");
+    }
+    if (!res.ok || !res.body) {
+      throw new TtsError(res.status === 401 || res.status === 403 ? "invalid_key" : res.status === 402 ? "quota" : res.status === 429 ? "rate_limited" : "upstream");
+    }
+    // pass audio through as it arrives, keeping a copy for the cache
+    ElevenLabsTts.running++;
+    const chunks: Uint8Array[] = [];
+    const reader = res.body.getReader();
+    let done = false;
+    const finish = () => {
+      if (!done) {
         done = true;
-        clearTimeout(timer);
-        EdgeTts.running--;
-      };
-      const timer = setTimeout(() => child.kill(), 45_000);
-      const body = new ReadableStream<Uint8Array>({
-        start: (c) => void (ctrl = c),
-        cancel: () => void child.kill(), // the visitor skipped ahead: stop generating
-      });
-      child.stdout.on("data", (c: Buffer) => {
-        chunks.push(c);
-        ctrl?.enqueue(new Uint8Array(c));
-        if (!started) {
-          started = true;
-          resolve(body);
-        }
-      });
-      child.stderr.on("data", (c: Buffer) => {
-        if (err.length < 300) err += c.toString();
-      });
-      child.on("error", (e) => {
-        finish();
-        if (!started) reject(new Error(`edge spawn: ${(e as NodeJS.ErrnoException).code ?? e.message}`));
-      });
-      child.on("close", (code) => {
-        finish();
-        if (code === 0 && chunks.length) {
-          const all = Buffer.concat(chunks);
-          EdgeTts.cache.set(key, all.buffer.slice(all.byteOffset, all.byteOffset + all.byteLength) as ArrayBuffer);
-          if (EdgeTts.cache.size > 80) EdgeTts.cache.delete(EdgeTts.cache.keys().next().value!);
-        }
-        if (!started) reject(new Error(`edge exit ${code}${err ? ": " + err.trim().slice(0, 120) : ""}`));
-        else {
-          try {
-            ctrl?.close();
-          } catch {
-            /* already cancelled */
+        ElevenLabsTts.running--;
+      }
+    };
+    return new ReadableStream<Uint8Array>({
+      async pull(ctrl) {
+        try {
+          const { value, done: end } = await reader.read();
+          if (end) {
+            finish();
+            const all = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+            let o = 0;
+            for (const c of chunks) {
+              all.set(c, o);
+              o += c.length;
+            }
+            if (all.length) {
+              ElevenLabsTts.cache.set(key, all.buffer);
+              if (ElevenLabsTts.cache.size > 120) ElevenLabsTts.cache.delete(ElevenLabsTts.cache.keys().next().value!);
+            }
+            ctrl.close();
+            return;
           }
+          chunks.push(value);
+          ctrl.enqueue(value);
+        } catch (e) {
+          finish();
+          ctrl.error(e);
         }
-      });
-      child.stdin.end(JSON.stringify({ text, voice }), "utf8");
+      },
+      cancel() {
+        finish();
+        void reader.cancel(); // the player skipped ahead: stop downloading
+      },
     });
   }
 }
 
-/** EDGE_TTS_PYTHON, else the project's .venv, else python on PATH. */
-function resolvePython() {
-  if (process.env.EDGE_TTS_PYTHON) return process.env.EDGE_TTS_PYTHON;
-  const venv = path.join(process.cwd(), ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
-  if (existsSync(venv)) return venv;
-  return process.platform === "win32" ? "python" : "python3";
-}
-
 export function getTtsProvider(): TtsProvider | null {
   const which = (process.env.TTS_PROVIDER || "").toLowerCase();
-  if (which === "edge") return new EdgeTts();
-  if ((which === "azure" || !which) && process.env.AZURE_SPEECH_KEY && process.env.AZURE_SPEECH_REGION) {
+  if ((which === "elevenlabs" || !which) && process.env.ELEVENLABS_API_KEY?.trim()) return new ElevenLabsTts();
+  if (which === "azure" && process.env.AZURE_SPEECH_KEY && process.env.AZURE_SPEECH_REGION) {
     return new AzureTts(process.env.AZURE_SPEECH_KEY, process.env.AZURE_SPEECH_REGION);
   }
-  if ((which === "google" || !which) && process.env.GOOGLE_TTS_API_KEY) return new GoogleTts(process.env.GOOGLE_TTS_API_KEY);
-  // no paid provider configured → free Edge voices
-  if (!which) return new EdgeTts();
+  if (which === "google" && process.env.GOOGLE_TTS_API_KEY) return new GoogleTts(process.env.GOOGLE_TTS_API_KEY);
   return null;
 }

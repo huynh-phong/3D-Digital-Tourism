@@ -40,11 +40,12 @@ export function splitSentences(text: string): string[] {
 /** Subtitle-only pacing: ~15 chars/s at rate 1, minimum 1.6 s. */
 const readingMs = (s: string, rate: number) => Math.max(1600, (s.length / 15) * 1000) / rate;
 
-let cloudAvailable: boolean | null = null; // null = unknown until the server says
+/** Server voice per language; null = unknown until /api/status answers. */
+let cloudVoices: Record<Lang, boolean> | null = null;
 if (typeof window !== "undefined") {
   fetch("/api/status")
     .then((r) => r.json())
-    .then((s: { tts: string | null }) => (cloudAvailable = !!s.tts))
+    .then((s: { tts: string | null; voices?: Record<Lang, boolean> }) => (cloudVoices = s.voices ?? { vi: !!s.tts, en: !!s.tts }))
     .catch(() => {});
 }
 
@@ -90,7 +91,7 @@ class Narrator {
   private chooseEngine(): Engine {
     const s = useSettings.getState();
     if (!s.voiceEnabled || s.voiceMode === "none") return "subtitles";
-    if (s.voiceMode === "cloud" && cloudAvailable !== false) return "cloud";
+    if (s.voiceMode === "cloud" && (cloudVoices === null || cloudVoices[this.lang])) return "cloud";
     if (pickBrowserVoice(this.lang)) return "browser";
     return "subtitles";
   }
@@ -102,10 +103,13 @@ class Narrator {
     this.lang = lang;
     this.sentences = splitSentences(text);
     const engine = this.chooseEngine();
+    const st = useSettings.getState();
     const notice =
-      useSettings.getState().voiceEnabled && engine === "subtitles" && useSettings.getState().voiceMode !== "none"
-        ? "no_voice"
-        : null;
+      st.voiceEnabled && st.voiceMode === "cloud" && engine !== "cloud" && cloudVoices && !cloudVoices[lang]
+        ? "voice_missing" // e.g. no ElevenLabs voice ID configured for this language
+        : st.voiceEnabled && engine === "subtitles" && st.voiceMode !== "none"
+          ? "no_voice"
+          : null;
     useNarrator.setState({ key, title, engine, notice, sentenceCount: this.sentences.length, sentenceIndex: 0, subtitle: "" });
     void this.playSentence(0, token);
   }

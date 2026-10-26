@@ -100,7 +100,7 @@ export function GuideCard({ chatRef }: { chatRef: React.RefObject<HTMLInputEleme
       if (!res.ok) throw new Error("http");
       const data = (await res.json()) as { answer: string; sources: string[]; mode: Msg["mode"]; lang?: Lang };
       if (!data.answer?.trim()) throw new Error("empty");
-      // the text is shown first; the voice follows the answer's language (vi → HoaiMy, en → Jenny)
+      // the text is shown first; the voice follows the answer's language (vi → "Trang", en → English female voice)
       const answerLang = data.lang ?? lang;
       setMsgs((m) => [...m, { role: "assistant", content: data.answer, sources: data.sources, mode: data.mode, lang: answerLang }]);
       narrator?.play(data.answer, answerLang, "answer", t.guide.name);
@@ -177,6 +177,7 @@ export function GuideCard({ chatRef }: { chatRef: React.RefObject<HTMLInputEleme
         ) : null}
         {nar.notice === "no_voice" && voiceEnabled && <p className="mt-1 text-[11px] text-amber">{t.guide.noViVoice}</p>}
         {nar.notice === "voice_fallback" && voiceEnabled && <p className="mt-1 text-[11px] text-amber">{t.guide.voiceFallback}</p>}
+        {nar.notice === "voice_missing" && voiceEnabled && <p className="mt-1 text-[11px] text-amber">{t.guide.voiceMissing}</p>}
       </div>
 
       {awaitingContinue && (
