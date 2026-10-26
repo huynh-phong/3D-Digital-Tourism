@@ -19,8 +19,10 @@ export async function GET(req: Request) {
   const parsed = Body.safeParse({ text: q.get("text") ?? "", lang: q.get("lang") });
   if (!parsed.success) return Response.json({ error: "invalid_request" }, { status: 400 });
   const { text, lang } = parsed.data;
+  // neighbouring sentences keep the intonation continuous between requests
+  const ctx = { prev: q.get("prev")?.slice(0, 300) || undefined, next: q.get("next")?.slice(0, 300) || undefined };
   try {
-    const body = await provider.stream(text, lang);
+    const body = await provider.stream(text, lang, ctx);
     return new Response(body, { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "private, max-age=86400" } });
   } catch (err) {
     return failure(err);

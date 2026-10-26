@@ -51,7 +51,11 @@ if (typeof window !== "undefined") {
 }
 
 /** Streaming URL: the server passes MP3 through as ElevenLabs generates it. */
-const ttsUrl = (text: string, lang: Lang, retry = 0) => `/api/tts?lang=${lang}&text=${encodeURIComponent(text)}${retry ? `&r=${retry}` : ""}`;
+const ttsUrl = (text: string, lang: Lang, prev?: string, next?: string, retry = 0) =>
+  `/api/tts?lang=${lang}&text=${encodeURIComponent(text)}` +
+  (prev ? `&prev=${encodeURIComponent(prev.slice(-200))}` : "") +
+  (next ? `&next=${encodeURIComponent(next.slice(0, 200))}` : "") +
+  (retry ? `&r=${retry}` : "");
 
 /**
  * Plays narration sentence by sentence with synced subtitles, always in the
@@ -109,7 +113,7 @@ class Narrator {
       if (a) this.drop(a);
       a = new Audio();
       a.preload = "auto";
-      a.src = ttsUrl(this.sentences[i], this.lang, retry);
+      a.src = ttsUrl(this.sentences[i], this.lang, this.sentences[i - 1], this.sentences[i + 1], retry);
       this.clips.set(i, a);
     }
     return a;

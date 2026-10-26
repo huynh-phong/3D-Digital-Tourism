@@ -6,8 +6,12 @@ import { directSpeech, stripTags } from "./expressive";
  * Text-to-speech: ElevenLabs only, one fixed voice for everything Minh Anh
  * says (Matilda by default), so the guide never changes voice.
  *
- * - Vietnamese: eleven_v3 with selective audio tags (see expressive.ts).
- * - English: eleven_flash_v2_5 (lowest latency), plain text.
+ * Consistency first: Vietnamese and English use the same model
+ * (eleven_flash_v2_5 by default), the same fixed voice settings and seed, and
+ * every sentence is sent with its neighbours as previous_text / next_text
+ * (request stitching), so separate sentence requests sound like one speaker.
+ * Setting ELEVENLABS_MODEL=eleven_v3 switches to expressive audio tags for
+ * Vietnamese instead (v3 varies more between sentences and has no stitching).
  * The key is sent only in the `xi-api-key` header from the server.
  * Rate-limit / overload answers are retried with backoff and requests are
  * queued (the Free plan allows few concurrent requests) instead of failing.
@@ -21,13 +25,23 @@ export class TtsError extends Error {
   }
 }
 
+/** Neighbouring sentences, for continuous prosody across separate requests. */
+export interface SpeechContext {
+  prev?: string;
+  next?: string;
+}
+
 export interface TtsProvider {
   name: string;
   voiceId: string;
-  synthesize(text: string, lang: Lang): Promise<ArrayBuffer>;
+  synthesize(text: string, lang: Lang, ctx?: SpeechContext): Promise<ArrayBuffer>;
   /** audio as it is generated */
-  stream(text: string, lang: Lang): Promise<ReadableStream<Uint8Array>>;
+  stream(text: string, lang: Lang, ctx?: SpeechContext): Promise<ReadableStream<Uint8Array>>;
 }
+
+/** Fixed delivery so every sentence sounds like the same speaker. */
+const VOICE_SETTINGS = { stability: 0.8, similarity_boost: 0.9, style: 0, use_speaker_boost: true };
+const SEED = 7;
 
 const MAX_PARALLEL = 2;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -40,12 +54,26 @@ class ElevenLabsTts implements TtsProvider {
   private key = (process.env.ELEVENLABS_API_KEY ?? "").trim();
   voiceId = (process.env.ELEVENLABS_VOICE_ID || DEFAULT_VOICE_ID).trim();
 
-  private model(lang: Lang) {
-    return lang === "vi" ? process.env.ELEVENLABS_MODEL_VI || "eleven_v3" : process.env.ELEVENLABS_MODEL_EN || "eleven_flash_v2_5";
+  private model = (process.env.ELEVENLABS_MODEL || "eleven_flash_v2_5").trim();
+
+  async synthesize(text: string, lang: Lang, ctx: SpeechContext = {}) {
+    return new Response(await this.stream(text, lang, ctx)).arrayBuffer();
   }
 
-  async synthesize(text: string, lang: Lang) {
-    return new Response(await this.stream(text, lang)).arrayBuffer();
+  /** Request body: stable settings + stitching, or (eleven_v3) tags for Vietnamese. */
+  private body(text: string, lang: Lang, ctx: SpeechContext) {
+    if (this.model === "eleven_v3") {
+      return { text: lang === "vi" ? directSpeech(text) : stripTags(text), model_id: this.model, seed: SEED };
+    }
+    return {
+      text: stripTags(text),
+      model_id: this.model,
+      language_code: lang,
+      voice_settings: VOICE_SETTINGS,
+      seed: SEED,
+      ...(ctx.prev ? { previous_text: stripTags(ctx.prev) } : {}),
+      ...(ctx.next ? { next_text: stripTags(ctx.next) } : {}),
+    };
   }
 
   /** Wait for a free upstream slot (released when the audio has been fully read). */
@@ -62,12 +90,11 @@ class ElevenLabsTts implements TtsProvider {
     else ElevenLabsTts.running--;
   }
 
-  async stream(text: string, lang: Lang): Promise<ReadableStream<Uint8Array>> {
+  async stream(text: string, lang: Lang, ctx: SpeechContext = {}): Promise<ReadableStream<Uint8Array>> {
     if (!/^[A-Za-z0-9]{10,40}$/.test(this.voiceId)) throw new TtsError("voice_not_configured");
-    const model = this.model(lang);
-    // what is spoken: tags only for the model that supports them; what is shown is never changed
-    const spoken = lang === "vi" && model === "eleven_v3" ? directSpeech(text) : stripTags(text);
-    const key = `${this.voiceId}|${model}|${spoken}`;
+    // what is spoken may carry tags (v3 only); what is shown is never changed
+    const payload = JSON.stringify(this.body(text, lang, ctx));
+    const key = `${this.voiceId}|${payload}`;
     const hit = ElevenLabsTts.cache.get(key);
     if (hit) return new Blob([hit]).stream();
 
@@ -79,7 +106,7 @@ class ElevenLabsTts implements TtsProvider {
           res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream?output_format=mp3_44100_64`, {
             method: "POST",
             headers: { "xi-api-key": this.key, "Content-Type": "application/json", Accept: "audio/mpeg" },
-            body: JSON.stringify({ text: spoken, model_id: model, ...(model === "eleven_v3" ? {} : { language_code: lang }) }),
+            body: payload,
             signal: AbortSignal.timeout(20_000),
           });
         } catch (e) {

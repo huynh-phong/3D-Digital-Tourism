@@ -43,7 +43,7 @@ với hướng dẫn viên AI **Minh Anh** dẫn đường, thuyết minh song n
 | 🧭 **Dẫn đường** | Chọn điểm đến (điểm dừng, hiện vật, phòng) → dải sáng bám sàn đi qua cửa và cầu thang hợp lệ, không xuyên tường; khoảng cách và chỉ dẫn rẽ trái/phải/lên/xuống |
 | 👩‍🏫 **Minh Anh dẫn đoàn** | Đi trước 2–4 m, chậm lại và chờ khi bạn tụt lại, nhắc bằng lời (không lặp liên tục), thuyết minh khi bạn đến gần, tạm dừng khi bạn đi xa |
 | 🤖 **Hỏi đáp AI** | Gemini Flash trả lời **chỉ từ kho tư liệu có nguồn**, đúng ngôn ngữ bạn đang gõ, nhớ ngữ cảnh nhiều lượt; thiếu khóa hoặc lỗi thì trả lời trích từ kho (ghi rõ chế độ demo/dự phòng) |
-| 🔊 **Một giọng duy nhất** | Minh Anh luôn nói bằng giọng nữ **Matilda** (ElevenLabs): tiếng Việt có biểu cảm (`eleven_v3` + audio tag chọn lọc), tiếng Anh độ trễ thấp (`eleven_flash_v2_5`); stream theo từng câu, lỗi thì thử lại rồi chỉ hiện phụ đề — không bao giờ đổi sang giọng khác |
+| 🔊 **Một giọng duy nhất** | Minh Anh luôn nói bằng giọng nữ **Matilda** (ElevenLabs) với cùng model (`eleven_flash_v2_5`), thông số giọng cố định, seed cố định và nối ngữ cảnh câu trước/sau, nên mọi câu tiếng Việt lẫn tiếng Anh nghe như một người; stream theo từng câu, lỗi thì thử lại rồi chỉ hiện phụ đề — không bao giờ đổi sang giọng khác |
 | 🌐 **Song ngữ & tiếp cận** | Tiếng Việt / English, giao diện sáng/tối, đổi phím, giảm chuyển động, phụ đề |
 
 ## 📸 Ảnh chụp
@@ -94,7 +94,7 @@ Sao chép `.env.example` thành `.env` (hoặc `.env.local`). Khóa chỉ đư�
 | `ANTHROPIC_API_KEY`, `AI_MODEL` | — | Lựa chọn thay thế: Claude |
 | `ELEVENLABS_API_KEY` | — | Giọng nói ElevenLabs (cần quyền *Text to Speech*; quyền *Voices: read* để tra voice ID) |
 | `ELEVENLABS_VOICE_ID` | `XrExE9yKIg1WjnnlVkGX` (Matilda) | Giọng duy nhất của Minh Anh cho cả tiếng Việt và tiếng Anh |
-| `ELEVENLABS_MODEL_VI` / `ELEVENLABS_MODEL_EN` | `eleven_v3` / `eleven_flash_v2_5` | Model có audio tag biểu cảm / model độ trễ thấp |
+| `ELEVENLABS_MODEL` | `eleven_flash_v2_5` | Một model cho mọi câu. `eleven_v3` bật tag biểu cảm tiếng Việt nhưng giọng dao động hơn giữa các câu |
 
 **Luồng hội thoại**
 
@@ -104,13 +104,13 @@ flowchart LR
   A --> G[Gemini Flash<br/>+ model dự phòng]
   G --> T[Chữ hiện ngay<br/>trong thẻ Minh Anh]
   T --> N["narrator: tách câu<br/>GET /api/tts"]
-  N --> E["ElevenLabs stream<br/>(vi: eleven_v3 + tag, en: flash)"]
+  N --> E["ElevenLabs stream<br/>(Matilda, flash v2.5,<br/>nối câu trước/sau)"]
   E --> P[Phát từng câu,<br/>câu sau tạo song song]
   E -. lỗi sau khi thử lại .-> F[Chỉ phụ đề cho câu đó]
 ```
 
 - Minh Anh trả lời bằng **ngôn ngữ bạn đang gõ** và chọn giọng tương ứng.
-- **Biểu cảm tiếng Việt** (`lib/server/expressive.ts`): chỉ bản văn gửi tới TTS mới được gắn tag, chữ hiển thị luôn sạch và nội dung không bị sửa. Tag dùng có chọn lọc: câu chào → `[cheerfully]`, câu hỏi → `[curious]`, chi tiết nổi bật → `[excited]`, sự kiện đau thương → `[softly]`; không lặp tag ở hai câu liền nhau, không chèn tiếng cười, thở dài hay hiệu ứng. Tiếng Anh đọc tự nhiên, không tag.
+- **Biểu cảm tiếng Việt** (tùy chọn, khi `ELEVENLABS_MODEL=eleven_v3`; `lib/server/expressive.ts`): chỉ bản văn gửi tới TTS mới được gắn tag, chữ hiển thị luôn sạch và nội dung không bị sửa. Tag dùng có chọn lọc: câu chào → `[cheerfully]`, câu hỏi → `[curious]`, chi tiết nổi bật → `[excited]`, sự kiện đau thương → `[softly]`; không lặp tag ở hai câu liền nhau, không chèn tiếng cười, thở dài hay hiệu ứng. Tiếng Anh đọc tự nhiên, không tag.
 - Câu hỏi mới dừng ngay âm thanh cũ, không bao giờ phát chồng.
 - Không lưu hội thoại hay file âm thanh; server chỉ giữ vài câu trong bộ nhớ đệm.
 - `/api/ask` và `/api/tts` có giới hạn tần suất và kiểm tra dữ liệu đầu vào (zod).
