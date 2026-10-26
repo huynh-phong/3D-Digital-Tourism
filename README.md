@@ -13,7 +13,7 @@ với hướng dẫn viên AI **Minh Anh** dẫn đường, thuyết minh song n
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=fff)](https://www.typescriptlang.org)
 [![Gemini](https://img.shields.io/badge/AI-Gemini%20Flash-8E75B2?logo=googlegemini&logoColor=fff)](https://ai.google.dev)
 [![Azure Speech](https://img.shields.io/badge/voice-Azure%20AI%20Speech-0078D4?logo=microsoftazure&logoColor=fff)](https://learn.microsoft.com/azure/ai-services/speech-service/)
-[![Tests](https://img.shields.io/badge/tests-64%20passing-2ea44f)](#-kiểm-thử)
+[![Tests](https://img.shields.io/badge/tests-60%20passing-2ea44f)](#-kiểm-thử)
 [![OSM](https://img.shields.io/badge/data-OpenStreetMap%20ODbL-7EBC6F?logo=openstreetmap&logoColor=fff)](https://www.openstreetmap.org/copyright)
 
 [Tính năng](#-tính-năng) · [Ảnh chụp](#-ảnh-chụp) · [Cài đặt](#-cài-đặt-nhanh) · [Cấu hình AI & giọng nói](#-cấu-hình-ai--giọng-nói) · [Kiến trúc](#-kiến-trúc) · [Triển khai](#-triển-khai) · [Độ chính xác](#-độ-chính-xác-lịch-sử)
@@ -43,7 +43,7 @@ với hướng dẫn viên AI **Minh Anh** dẫn đường, thuyết minh song n
 | 🧭 **Dẫn đường** | Chọn điểm đến (điểm dừng, hiện vật, phòng) → dải sáng bám sàn đi qua cửa và cầu thang hợp lệ, không xuyên tường; khoảng cách và chỉ dẫn rẽ trái/phải/lên/xuống |
 | 👩‍🏫 **Minh Anh dẫn đoàn** | Đi trước 2–4 m, chậm lại và chờ khi bạn tụt lại, nhắc bằng lời (không lặp liên tục), thuyết minh khi bạn đến gần, tạm dừng khi bạn đi xa |
 | 🤖 **Hỏi đáp AI** | Gemini Flash trả lời **chỉ từ kho tư liệu có nguồn**, đúng ngôn ngữ bạn đang gõ, nhớ ngữ cảnh nhiều lượt; thiếu khóa hoặc lỗi thì trả lời trích từ kho (ghi rõ chế độ demo/dự phòng) |
-| 🔊 **Giọng bản xứ** | Minh Anh đọc tiếng Việt bằng giọng nữ **HoaiMy** và tiếng Anh bằng giọng nữ **Jenny** (Azure AI Speech, phát âm chuẩn), cố định theo ngôn ngữ; stream theo từng câu, lỗi thì thử lại rồi chỉ hiện phụ đề. ElevenLabs là lựa chọn thay thế |
+| 🔊 **Giọng bản xứ** | Minh Anh đọc tiếng Việt bằng giọng nữ **HoaiMy** và tiếng Anh bằng giọng nữ **Jenny** (Azure AI Speech, phát âm chuẩn), cố định theo ngôn ngữ; stream theo từng câu, lỗi thì thử lại rồi chỉ hiện phụ đề |
 | 🌐 **Song ngữ & tiếp cận** | Tiếng Việt / English, giao diện sáng/tối, đổi phím, giảm chuyển động, phụ đề |
 
 ## 📸 Ảnh chụp
@@ -92,10 +92,8 @@ Sao chép `.env.example` thành `.env` (hoặc `.env.local`). Khóa chỉ đư�
 | `GEMINI_FALLBACK_MODELS` | `gemini-flash-latest` | Model dự phòng khi model chính quá tải / 429 / quá thời gian (phân tách bằng dấu phẩy) |
 | `AI_PROVIDER` | tự động | Ép chọn `gemini` hoặc `anthropic` |
 | `ANTHROPIC_API_KEY`, `AI_MODEL` | — | Lựa chọn thay thế: Claude |
-| `TTS_PROVIDER` | `azure` | `azure` (mặc định) hoặc `elevenlabs` |
 | `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` | — | Azure AI Speech (tạo dịch vụ *Speech service*, gói Free F0; lấy *KEY 1* và *Region* ở *Keys and Endpoint*) |
 | `AZURE_VOICE_VI`, `AZURE_VOICE_EN` | `vi-VN-HoaiMyNeural`, `en-US-JennyNeural` | Giọng nữ bản xứ cho từng ngôn ngữ |
-| `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL` | —, Sarah, `eleven_flash_v2_5` | Lựa chọn thay thế: một giọng ElevenLabs cho cả hai ngôn ngữ |
 
 **Luồng hội thoại**
 
@@ -111,7 +109,6 @@ flowchart LR
 ```
 
 - Minh Anh trả lời bằng **ngôn ngữ bạn đang gõ** và chọn giọng tương ứng.
-- **Biểu cảm tiếng Việt** (tùy chọn, khi `ELEVENLABS_MODEL=eleven_v3`; `lib/server/expressive.ts`): chỉ bản văn gửi tới TTS mới được gắn tag, chữ hiển thị luôn sạch và nội dung không bị sửa. Tag dùng có chọn lọc: câu chào → `[cheerfully]`, câu hỏi → `[curious]`, chi tiết nổi bật → `[excited]`, sự kiện đau thương → `[softly]`; không lặp tag ở hai câu liền nhau, không chèn tiếng cười, thở dài hay hiệu ứng. Tiếng Anh đọc tự nhiên, không tag.
 - Câu hỏi mới dừng ngay âm thanh cũ, không bao giờ phát chồng.
 - Không lưu hội thoại hay file âm thanh; server chỉ giữ vài câu trong bộ nhớ đệm.
 - `/api/ask` và `/api/tts` có giới hạn tần suất và kiểm tra dữ liệu đầu vào (zod).
@@ -136,7 +133,7 @@ Mọi phím (trừ Esc) đổi được trong Cài đặt. Thiết bị cảm �
 
 ## 🧱 Kiến trúc
 
-**Công nghệ:** Next.js 16 (App Router) · React 19 · Three.js + React Three Fiber + drei · Rapier (vật lý, character controller) · Zustand · Framer Motion · Tailwind CSS 4 · zod · Vitest · ElevenLabs API.
+**Công nghệ:** Next.js 16 (App Router) · React 19 · Three.js + React Three Fiber + drei · Rapier (vật lý, character controller) · Zustand · Framer Motion · Tailwind CSS 4 · zod · Vitest · Azure AI Speech.
 
 ```
 app/                 Trang: / (bản đồ), /dinh-doc-lap (tham quan), /sources · API: /api/ask, /api/tts, /api/status
@@ -153,7 +150,7 @@ lib/
   dinh/              palaceModel (hình + collider + đồ thị đi bộ từ một nguồn), route (tìm đường), textures (PBR thủ tục)
   guide/brain.ts     Máy trạng thái của Minh Anh
   tour/              director, navigator, destinations
-  server/            ai.ts (Gemini / Claude), tts.ts (Azure HoaiMy/Jenny, ElevenLabs tùy chọn), expressive.ts (tag biểu cảm), rateLimit
+  server/            ai.ts (Gemini / Claude), tts.ts (Azure: HoaiMy / Jenny), rateLimit
   audio/narrator.ts  Phát theo câu, phụ đề đồng bộ, tự hạ cấp giọng đọc
 scripts/fetch-osm.mjs  Tải & tiền xử lý OSM
 tests/               vitest
@@ -186,12 +183,11 @@ Next.js 16 giữ trang đã xem trong React `<Activity>`. Khi trang bị ẩn, R
 npm test
 ```
 
-64 kiểm thử (Vitest), gồm:
+60 kiểm thử (Vitest), gồm:
 
 - **Kho tri thức:** toàn vẹn dữ liệu, nguồn, i18n, truy xuất câu trả lời.
 - **Vật lý:** một capsule dùng character controller Rapier đi từ cổng lên sân thượng, xuống tầng hầm, tới các hiện vật theo tuyến đã lập; tường chặn được.
 - **Tìm đường:** từ 7 điểm xuất phát tới mọi điểm đến; tuyến được kiểm tra độc lập là không xuyên vật cản, chỉ đổi tầng qua cầu thang, đi vòng quanh thảm cỏ.
-- **Biểu cảm giọng nói:** tag chỉ gắn ở câu phù hợp, không lặp liên tiếp, không đổi chữ; tag lạ bị loại bỏ để không bị đọc thành tiếng.
 - **Minh Anh:** dẫn trước, dừng chờ, nhắc có giới hạn, không rung trạng thái, đi tiếp khi bắt kịp, chỉ thuyết minh đúng lúc, không đi khi không có tuyến.
 - **Thành phố:** mặt đường hướng lên, xe không chồng nhau và không kẹt cứng, thuyền luôn trên mặt nước, chim bay trên mái nhà.
 
@@ -203,7 +199,7 @@ npm test
 2. **Settings → Environment Variables**: thêm `GEMINI_API_KEY` (và các biến tùy chọn ở trên).
 3. Deploy. `/api/*` chạy dưới dạng serverless function; `/`, `/dinh-doc-lap`, `/sources` là trang tĩnh.
 
-> ⚠️ Vercel **không đọc file `.env` trên máy bạn**. Hãy thêm `GEMINI_API_KEY`, `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION`, `TTS_PROVIDER=azure` (và các biến giọng nếu đổi) cho cả môi trường **Production** và **Preview**, rồi Redeploy. Kiểm tra bằng `https://<tên-miền>/api/status`: kết quả đúng là `"tts":"azure"` và `"voices":{"vi":"vi-VN-HoaiMyNeural","en":"en-US-JennyNeural"}` (trang này không bao giờ hiển thị khóa).
+> ⚠️ Vercel **không đọc file `.env` trên máy bạn**. Hãy thêm `GEMINI_API_KEY`, `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` (và `AZURE_VOICE_VI` / `AZURE_VOICE_EN` nếu đổi giọng) cho cả môi trường **Production** và **Preview**, rồi Redeploy. Kiểm tra bằng `https://<tên-miền>/api/status`: kết quả đúng là `"tts":"azure"` và `"voices":{"vi":"vi-VN-HoaiMyNeural","en":"en-US-JennyNeural"}` (trang này không bao giờ hiển thị khóa).
 
 Giới hạn tần suất trong `lib/server/rateLimit.ts` là bộ nhớ trong của từng instance; để giới hạn chặt trên nhiều instance, hãy thay bằng kho dùng chung (ví dụ Redis).
 
@@ -228,7 +224,7 @@ Giới hạn tần suất trong `lib/server/rateLimit.ts` là bộ nhớ trong c
 
 - Nhân vật và kiến trúc dựng bằng mã; nên thay bằng mô hình GLB có giấy phép (nhân vật có rig, mô hình Dinh từ bản vẽ đo đạc). Giao diện `HumanoidAnim` và `palaceModel` đã tách sẵn để thay.
 - Chỉ đi được tầng nền, tầng hầm và sân thượng; các tầng lầu “chưa mô hình hóa”. Có lối tắt cầu thang (<kbd>E</kbd>).
-- Azure gói Free F0 giới hạn số ký tự mỗi tháng và số yêu cầu đồng thời (server xếp hàng tối đa 2 yêu cầu và tự thử lại); khi hết hạn mức, câu trả lời chỉ hiện phụ đề. Tiếng Việt chỉ có hai giọng bản xứ (HoaiMy nữ, NamMinh nam). Tag biểu cảm chỉ áp dụng khi dùng ElevenLabs `eleven_v3`.
+- Azure gói Free F0 giới hạn số ký tự mỗi tháng và số yêu cầu đồng thời (server xếp hàng tối đa 2 yêu cầu và tự thử lại); khi hết hạn mức, câu trả lời chỉ hiện phụ đề. Tiếng Việt chỉ có hai giọng bản xứ (HoaiMy nữ, NamMinh nam).
 - Biểu cảm tiếng Việt được chọn theo luật (từ khóa, dấu câu), chưa phân tích ngữ nghĩa sâu. Hoạt ảnh miệng chưa có lip-sync; nhân vật chỉ chuyển sang hoạt ảnh “nói” khi đang phát tiếng.
 - Chưa có nhập câu hỏi bằng giọng nói (micro).
 - Hiệu năng cần đo thêm trên nhiều cấu hình máy; có 3 mức đồ họa Thấp/Trung bình/Cao.
@@ -237,7 +233,7 @@ Giới hạn tần suất trong `lib/server/rateLimit.ts` là bộ nhớ trong c
 
 - Dữ liệu bản đồ © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), giấy phép ODbL 1.0.
 - Tư liệu lịch sử và kiến trúc: [Di tích lịch sử Dinh Độc Lập — dinhdoclap.gov.vn](https://dinhdoclap.gov.vn).
-- Giọng đọc: [Azure AI Speech](https://learn.microsoft.com/azure/ai-services/speech-service/) (HoaiMy, Jenny); tùy chọn [ElevenLabs](https://elevenlabs.io).
+- Giọng đọc: [Azure AI Speech](https://learn.microsoft.com/azure/ai-services/speech-service/) (HoaiMy, Jenny).
 - AI: [Google Gemini API](https://ai.google.dev).
 
 Danh mục đầy đủ tài sản và giấy phép nằm trong `data/assets.ts` và trang `/sources`.

@@ -112,7 +112,7 @@ export const useSettings = create<SettingsState>()(
       // Older saves may miss newly added key bindings.
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<SettingsState>;
-        // the browser-voice mode no longer exists: Minh Anh always speaks with the ElevenLabs voice
+        // the browser-voice mode no longer exists: Minh Anh always speaks with the Azure voice
         const voiceMode: VoiceMode = (p.voiceMode as string) === "none" ? "none" : "cloud";
         return { ...current, ...p, voiceMode, keys: { ...DEFAULT_KEYS, ...(p.keys ?? {}) } };
       },

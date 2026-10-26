@@ -5,7 +5,7 @@ import { useSettings } from "@/lib/store/settings";
 import type { Lang } from "@/types";
 
 export type NarratorStatus = "idle" | "loading" | "speaking" | "paused";
-/** "voice" = Minh Anh's ElevenLabs voice (the only voice); "subtitles" = text only. */
+/** "voice" = Minh Anh's Azure voice (HoaiMy / Jenny); "subtitles" = text only. */
 export type Engine = "voice" | "subtitles";
 
 interface NarratorState {
@@ -50,16 +50,18 @@ if (typeof window !== "undefined") {
     .catch(() => {});
 }
 
-/** Streaming URL: the server passes MP3 through as ElevenLabs generates it. */
-const ttsUrl = (text: string, lang: Lang, prev?: string, next?: string, retry = 0) =>
-  `/api/tts?lang=${lang}&text=${encodeURIComponent(text)}` +
-  (prev ? `&prev=${encodeURIComponent(prev.slice(-200))}` : "") +
-  (next ? `&next=${encodeURIComponent(next.slice(0, 200))}` : "") +
-  (retry ? `&r=${retry}` : "");
+/**
+ * Streaming URL: the server passes MP3 through as Azure generates it. `v`
+ * changes whenever the voice provider changes, so audio a browser kept from
+ * an earlier voice can never be played again.
+ */
+const VOICE_VERSION = "azure-1";
+const ttsUrl = (text: string, lang: Lang, retry = 0) =>
+  `/api/tts?v=${VOICE_VERSION}&lang=${lang}&text=${encodeURIComponent(text)}` + (retry ? `&r=${retry}` : "");
 
 /**
  * Plays narration sentence by sentence with synced subtitles, always in the
- * same ElevenLabs voice. A new play() stops the previous one (no overlap). If
+ * same Azure voice for the language. A new play() stops the previous one (no overlap). If
  * a sentence can't be voiced even after a retry, that sentence is shown as a
  * subtitle and the next one tries the voice again — never a different voice.
  */
@@ -113,7 +115,7 @@ class Narrator {
       if (a) this.drop(a);
       a = new Audio();
       a.preload = "auto";
-      a.src = ttsUrl(this.sentences[i], this.lang, this.sentences[i - 1], this.sentences[i + 1], retry);
+      a.src = ttsUrl(this.sentences[i], this.lang, retry);
       this.clips.set(i, a);
     }
     return a;

@@ -10,6 +10,8 @@ const Body = z.object({
 /**
  * GET /api/tts?lang=vi&text=… streams MP3 so an <audio> element can start
  * playing while the rest is still being generated. POST returns the whole file.
+ * Audio is never cached by the browser (no-store), so a voice change on the
+ * server is heard immediately; repeated sentences are cached server-side.
  */
 export async function GET(req: Request) {
   const provider = getTtsProvider();
@@ -19,11 +21,9 @@ export async function GET(req: Request) {
   const parsed = Body.safeParse({ text: q.get("text") ?? "", lang: q.get("lang") });
   if (!parsed.success) return Response.json({ error: "invalid_request" }, { status: 400 });
   const { text, lang } = parsed.data;
-  // neighbouring sentences keep the intonation continuous between requests
-  const ctx = { prev: q.get("prev")?.slice(0, 300) || undefined, next: q.get("next")?.slice(0, 300) || undefined };
   try {
-    const body = await provider.stream(text, lang, ctx);
-    return new Response(body, { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "private, max-age=86400" } });
+    const body = await provider.stream(text, lang);
+    return new Response(body, { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "no-store" } });
   } catch (err) {
     return failure(err);
   }
@@ -51,7 +51,7 @@ export async function POST(req: Request) {
   try {
     const audio = await provider.synthesize(body.text, body.lang);
     return new Response(audio, {
-      headers: { "Content-Type": "audio/mpeg", "Cache-Control": "public, max-age=86400" },
+      headers: { "Content-Type": "audio/mpeg", "Cache-Control": "no-store" },
     });
   } catch (err) {
     return failure(err);

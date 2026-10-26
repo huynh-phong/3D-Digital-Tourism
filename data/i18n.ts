@@ -113,7 +113,7 @@ const vi = {
     askError: "Không gửi được câu hỏi. Vui lòng thử lại.",
     rateLimited: "Bạn hỏi hơi nhanh — đợi vài giây rồi thử lại nhé.",
     sourcesUsed: "Nguồn",
-    voiceCloud: "Giọng Minh Anh (ElevenLabs)",
+    voiceCloud: "Giọng Minh Anh (Azure)",
     voiceNone: "Chỉ phụ đề",
     suggestions: [
       "Phòng này được dùng để làm gì?",
@@ -333,7 +333,7 @@ const en: Dict = {
     askError: "Couldn't send your question. Please try again.",
     rateLimited: "That's a bit fast — wait a few seconds and try again.",
     sourcesUsed: "Sources",
-    voiceCloud: "Minh Anh's voice (ElevenLabs)",
+    voiceCloud: "Minh Anh's voice (Azure)",
     voiceNone: "Subtitles only",
     suggestions: [
       "What was this room used for?",
