@@ -29,7 +29,7 @@ const STARTS: Vec3[] = [
   [-30, 0, 100], // ring drive
   [0, LEVEL.f1, -20], // hall
   [30, LEVEL.f1, -14], // cabinet room
-  [0, LEVEL.f1, -45], // credentials room
+  [0, LEVEL.f1, -52], // Khánh tiết room
   [-8, LEVEL.basement, -52], // basement
   [0, LEVEL.roof, -40], // roof
 ];
@@ -37,7 +37,8 @@ const STARTS: Vec3[] = [
 describe("route planner", () => {
   it("finds a route from everywhere to every destination, never through a wall or across floors", () => {
     for (const s of STARTS) {
-      for (const d of DESTINATIONS) {
+      // floor 2 is a separate space reached by the central staircase's F door (see tests/interaction)
+      for (const d of DESTINATIONS.filter((x) => x.floor !== "f2")) {
         const r = planner.plan(s, d.point);
         expect(r, `${s} → ${d.key}`).not.toBeNull();
         const pts = r!.points;

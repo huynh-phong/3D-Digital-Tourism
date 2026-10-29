@@ -6,6 +6,9 @@ import { instruction, project, type Route, type RoutePlanner } from "@/lib/dinh/
 import { runtime, useGame } from "@/lib/store/game";
 import type { Vec3 } from "@/types";
 import { DESTINATIONS, DEST_BY_KEY, type Destination } from "./destinations";
+import { spacePath, type InteractionPoint } from "@/data/dinh/interactions";
+import { spaceAt } from "@/data/dinh/spaces";
+import { useWorld } from "@/lib/world/streaming";
 
 /**
  * Visitor directions: keeps the route from the visitor to the selected
@@ -56,6 +59,36 @@ export const currentDestination = (): Destination | undefined => {
   return k ? DEST_BY_KEY.get(k) : undefined;
 };
 
+/**
+ * Where to go now for the selected destination. In the active space that is
+ * the destination itself; in another space it is the door (F) that starts the
+ * shortest way there through the connection graph — routes never cross into
+ * a space that is not loaded.
+ */
+export interface NavTarget {
+  point: Vec3;
+  guideSpot: Vec3;
+  radius: number;
+  /** the door to go through first, when the destination is in another space */
+  door: InteractionPoint | null;
+}
+export function navTarget(dest: Destination | undefined = currentDestination()): NavTarget | null {
+  if (!dest) return null;
+  const active = useWorld.getState().active;
+  const space = spaceAt(dest.point);
+  if (space === active) return { point: dest.point, guideSpot: dest.guideSpot, radius: dest.radius, door: null };
+  const path = spacePath(active, space);
+  if (!path || !path.length) return null;
+  const door = path[0];
+  // Minh Anh waits beside the door, the visitor goes right up to it
+  // a walked connection (central staircase): head for the top of the flight, the space follows on the way
+  if (door.walk && door.portal) {
+    const to = door.portal.to;
+    return { point: to, guideSpot: [to[0] + 1.2, to[1], to[2] + 0.6], radius: door.radius, door };
+  }
+  return { point: door.at, guideSpot: [door.at[0] + 1.3, door.at[1], door.at[2] + 0.4], radius: door.radius, door };
+}
+
 const sameFloor = (a: Vec3, b: Vec3) => floorFromY(a[1]) === floorFromY(b[1]);
 const flat = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[2] - b[2]);
 
@@ -72,9 +105,12 @@ export function tickNavigator(now: number) {
     return;
   }
   const P = runtime.player;
+  const target = navTarget(dest);
+  const active = useWorld.getState().active;
+  const planKey = `${dest.key}@${active}`;
 
-  // Arrival
-  if (g.navStatus === "active" && sameFloor(P, dest.point) && flat(P, dest.point) < dest.radius) {
+  // Arrival (only at the destination itself, not at a door on the way)
+  if (g.navStatus === "active" && target && !target.door && sameFloor(P, dest.point) && flat(P, dest.point) < dest.radius) {
     useGame.setState({ navStatus: "arrived", navDistance: 0 });
     navRuntime.arrivedAt = now;
     navRuntime.route = null;
@@ -92,19 +128,19 @@ export function tickNavigator(now: number) {
 
   // Replan when the target changed, or the visitor moved enough (rate-limited)
   const moved = Math.hypot(P[0] - navRuntime.lastFrom[0], (P[1] - navRuntime.lastFrom[1]) * 2, P[2] - navRuntime.lastFrom[2]);
-  const keyChanged = navRuntime.lastKey !== dest.key;
+  const keyChanged = navRuntime.lastKey !== planKey;
   if (keyChanged || (moved > NAV.replanMove && now - navRuntime.lastPlan > NAV.replanInterval)) {
-    navRuntime.lastKey = dest.key;
+    navRuntime.lastKey = planKey;
     navRuntime.lastPlan = now;
     navRuntime.lastFrom = [...P];
-    const r = planner.plan(P, dest.point);
+    const r = target ? planner.plan(P, target.point) : null;
     navRuntime.route = r;
     navRuntime.version++;
     if (!r) {
       // No walkable connection: say so and suggest the nearest place that is reachable.
       if (g.navStatus !== "noPath" || now - navRuntime.lastHintCheck > 2) {
         navRuntime.lastHintCheck = now;
-        const hint = DESTINATIONS.filter((d) => d.key !== dest.key)
+        const hint = DESTINATIONS.filter((d) => d.key !== dest.key && spaceAt(d.point) === active)
           .sort((a, b) => flat(a.point, P) - flat(b.point, P))
           .slice(0, 6)
           .find((d) => planner.plan(P, d.point));

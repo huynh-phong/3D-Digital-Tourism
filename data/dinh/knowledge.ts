@@ -65,7 +65,7 @@ export const KNOWLEDGE: KnowledgeEntry[] = [
       "Vì vậy công trình bạn thấy hôm nay không mang dấu vết của vụ ném bom 1962 — đó là dinh mới, khởi công ngày 01/7/1962.",
     historical_context_en:
       "So the building you see today does not bear marks of the 1962 bombing — it is the new palace, begun on 1 July 1962.",
-    facts: ["bombing-1962", "rebuild-decision", "construction-start"],
+    facts: ["bombing-1962", "rebuild-decision", "construction-start", "helipad-bomb-circles", "rooftop-uh1"],
     tour_stop_id: "stop-roof",
     floor: null,
     spatial_reference: "Sự kiện liên quan đến dinh cũ",
@@ -168,19 +168,49 @@ export const KNOWLEDGE: KnowledgeEntry[] = [
     name_vi: "Phòng Trình Quốc thư",
     name_en: "Credentials Presentation Room",
     description_vi:
-      "Phòng Trình Quốc thư là trung tâm của Dinh theo mặt bằng hình chữ Cát. Đây cũng là một trong những vị trí có bảng giới thiệu trong lộ trình tham quan chính thức.",
+      "Phòng Trình Quốc thư là trung tâm của Dinh theo mặt bằng hình chữ Cát. Phòng trưng bày bức sơn mài “Bình Ngô Đại Cáo” (8,20 m × 4,70 m) của họa sĩ Nguyễn Văn Minh.",
     description_en:
-      "The Credentials Presentation Room is the centre of the palace's 吉-shaped plan, and one of the places with an information panel on the official route.",
+      "The Credentials Presentation Room is the centre of the palace's 吉-shaped plan. It displays the lacquer painting “Bình Ngô Đại Cáo” (8.20 m × 4.70 m) by Nguyễn Văn Minh.",
     historical_context_vi:
       "Như tên gọi, đây là không gian nghi lễ. Kích thước, vị trí cụ thể và đồ nội thất trong mô phỏng là ước lượng vì trang chính thức không công bố bản vẽ chi tiết.",
     historical_context_en:
       "As the name says, this is a ceremonial space. Its size, exact position and furnishing in this simulation are estimates, as no detailed drawings are published.",
-    facts: ["center-credentials", "char-cat", "route-panels"],
+    facts: ["center-credentials", "char-cat", "route-panels", "binh-ngo-painting", "binh-ngo-subject"],
     tour_stop_id: "stop-credentials",
-    floor: "f1",
-    spatial_reference: "Trung tâm khối nhà (vị trí trong mô phỏng là ước lượng)",
+    floor: "f2",
+    spatial_reference: "Trung tâm mặt bằng, đặt ở tầng 2 trong mô phỏng (tầng là ước lượng)",
     confidence_status: "estimated",
     keywords: ["trinh quoc thu", "quoc thu", "dai su", "nghi le", "credentials", "ambassador", "ceremonial", "phong nay"],
+  }),
+  entry({
+    id: "k-dai-yen",
+    name_vi: "Phòng Đại yến",
+    name_en: "State Banquet Room",
+    description_vi: "Phòng Đại yến nằm bên trái sảnh lầu một. Phòng được trang trí bằng bức sơn dầu “Sơn Hà Cẩm Tú” của kiến trúc sư Ngô Viết Thụ.",
+    description_en: "The Banquet Room is to the left of the entrance hall. It is decorated with the oil painting “Sơn Hà Cẩm Tú” by the architect Ngô Viết Thụ.",
+    historical_context_vi: "Kiến trúc sư Ngô Viết Thụ hoàn thành bức tranh trong mười ngày để kịp lễ khánh thành Dinh ngày 31/10/1966; trong diễn văn khánh thành, ông gọi phòng này là “phòng ăn lớn”. Kích thước phòng và vị trí bàn ghế trong mô phỏng là ước lượng từ ảnh.",
+    historical_context_en: "Ngô Viết Thụ finished the painting in ten days for the inauguration on 31 October 1966; in his inauguration speech he called this room “the large dining room”. The room size and furniture positions here are estimated from photos.",
+    facts: ["layout-floor1", "son-ha-painting"],
+    tour_stop_id: "stop-dai-yen",
+    floor: "f1",
+    spatial_reference: "Bên trái sảnh lầu một (theo trang chính thức)",
+    confidence_status: "estimated",
+    keywords: ["dai yen", "phong an", "yen tiec", "son ha cam tu", "banquet", "dining", "ngo viet thu tranh"],
+  }),
+  entry({
+    id: "k-khanh-tiet",
+    name_vi: "Phòng Khánh tiết",
+    name_en: "Khánh tiết (Ceremonial) Room",
+    description_vi: "Phòng Khánh tiết nằm phía sau cầu thang trung tâm. Ở phía đầu phòng treo bức tranh thủy mặc “Việt Nam Quốc Tổ” dài 5,6 m, ghép từ 8 tấm, của họa sĩ Trọng Nội.",
+    description_en: "The Khánh tiết Room lies behind the central staircase. At the head of the room hangs the 5.6 m ink painting “Việt Nam Quốc Tổ” in 8 panels by Trọng Nội.",
+    historical_context_vi: "Ngày 22/10/1966, họa sĩ Trọng Nội viết thư xin tặng tác phẩm cho Dinh và từ chối nhận thù lao. Tranh vẽ Quốc Tổ Hùng Vương cầm bút viết hai chữ “Văn Lang”. Kích thước phòng trong mô phỏng là ước lượng từ ảnh.",
+    historical_context_en: "On 22 October 1966 Trọng Nội offered the work to the palace as a gift, declining any fee. It shows the Hùng King writing the words “Văn Lang”. The room size here is estimated from photos.",
+    facts: ["layout-floor1", "quoc-to-painting", "quoc-to-gift"],
+    tour_stop_id: "stop-khanh-tiet",
+    floor: "f1",
+    spatial_reference: "Phía sau cầu thang trung tâm (theo trang chính thức)",
+    confidence_status: "estimated",
+    keywords: ["khanh tiet", "quoc to", "hung vuong", "trong noi", "van lang", "ceremonial", "reception hall"],
   }),
   entry({
     id: "k-cabinet",
@@ -289,6 +319,25 @@ export const KNOWLEDGE: KnowledgeEntry[] = [
     spatial_reference: "—",
     confidence_status: "verified",
     keywords: ["tham quan", "ve", "gio mo cua", "audio", "xe dien", "huong dan vien", "visit", "ticket", "opening", "hours"],
+  }),
+  entry({
+    id: "k-pres-reception",
+    name_vi: "Phòng Tiếp khách Tổng thống",
+    name_en: "President's Reception Room",
+    description_vi:
+      "Phòng Tiếp khách Tổng thống ở tầng 2. Trong phòng có hai chiếc tủ sơn mài đỏ thẫm, bốn cánh tủ vẽ vàng đề tài “Mai – Lan” và “Cúc – Trúc” của trang trí gia Nguyễn Văn Triêm (1966–1967).",
+    description_en:
+      "The President's Reception Room is on floor 2. It holds two deep-red lacquer cabinets whose four doors are painted in gold with Plum–Orchid and Chrysanthemum–Bamboo by the decorator Nguyễn Văn Triêm (1966–1967).",
+    historical_context_vi:
+      "Bộ sofa bọc gấm vàng, thảm đỏ có chữ Thọ, khám gỗ với đôi ngà voi được dựng theo ảnh tham chiếu; vị trí và kích thước phòng là ước lượng; họa tiết trên cánh tủ trong mô phỏng là minh họa, không sao chép tác phẩm.",
+    historical_context_en:
+      "The gold damask sofas, the red carpet with the longevity character and the wood niche with elephant tusks follow the reference photos; the room's position and size are estimates; the cabinet painting here is illustrative, not a copy.",
+    facts: ["pres-reception-cabinets", "pres-reception-chairs"],
+    tour_stop_id: "stop-pres-reception",
+    floor: "f2",
+    spatial_reference: "Tầng 2 (theo trang chính thức); vị trí trong tầng là ước lượng",
+    confidence_status: "estimated",
+    keywords: ["tiep khach tong thong", "phong tiep khach", "tu son mai", "mai lan cuc truc", "nga voi", "reception room", "lacquer cabinet"],
   }),
 ];
 

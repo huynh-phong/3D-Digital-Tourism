@@ -8,7 +8,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { useVisitKey } from "@/lib/useVisitKey";
 import { useMediaQuery } from "@/lib/useMedia";
 import { loadCityData, mapView } from "@/lib/city/useCityBuild";
-import { LANDMARKS } from "@/data/landmarks";
+import { LANDMARKS, project } from "@/data/landmarks";
 import { FACT_BY_ID } from "@/data/dinh/sources";
 import { loc, useLang, useT } from "@/lib/i18n";
 import { keyLabel, useSettings } from "@/lib/store/settings";
@@ -105,20 +105,27 @@ export function HomeExperience() {
                     }}
                     type="button"
                     onClick={() => select(l.id)}
+                    // data-mode (full | short | dot) is set every frame by the marker projector
+                    data-selected={selected === l.id}
+                    data-full-len={loc(l.name, lang).length}
+                    data-short-len={loc(l.short, lang).length}
+                    data-mode="full"
                     style={{ visibility: "hidden" }}
-                    className="group pointer-events-auto absolute left-0 top-0 flex flex-col items-center outline-none data-[far=true]:[&_.lbl]:hidden"
+                    className="group pointer-events-auto absolute left-0 top-0 flex flex-col items-center outline-none data-[mode=dot]:[&_.lbl]:hidden data-[mode=full]:[&_.lbl-short]:hidden data-[mode=short]:[&_.lbl-full]:hidden"
                     aria-label={`${loc(l.name, lang)} — ${available ? t.map.available : t.map.comingSoon}`}
+                    title={loc(l.name, lang)}
                   >
                     <span
-                      className={`flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[12px] font-semibold shadow-md transition-transform group-hover:scale-105 group-focus-visible:ring-2 ring-[var(--focus)] ${
-                        available ? "border-transparent bg-accent text-on-accent" : "border-line bg-surface-solid text-fg"
+                      className={`flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[12px] font-semibold shadow-md transition-transform group-hover:scale-105 group-focus-visible:ring-2 ring-[var(--focus)] group-data-[mode=dot]:px-1 ${
+                        available ? "border-transparent bg-accent text-on-accent" : "border-dashed border-[var(--muted)] bg-surface-solid text-fg"
                       } ${selected === l.id ? "scale-110 ring-2 ring-[var(--blue)]" : ""}`}
                     >
-                      <Icon name="pin" size={13} />
-                      <span className="lbl">{loc(l.name, lang)}</span>
-                      {!available && <span className="lbl rounded-full bg-amber-soft px-1.5 text-[10px] text-amber">{t.map.comingSoon}</span>}
+                      <Icon name={available ? "play" : "clock"} size={13} />
+                      <span className="lbl lbl-full">{loc(l.name, lang)}</span>
+                      <span className="lbl lbl-short">{loc(l.short, lang)}</span>
+                      {!available && <span className="lbl lbl-full rounded-full bg-amber-soft px-1.5 text-[10px] text-amber">{t.map.comingSoon}</span>}
                     </span>
-                    <span className={`h-5 w-0.5 ${available ? "bg-accent" : "bg-[var(--muted)]"}`} />
+                    <span style={{ height: "calc(20px + var(--lift, 0px))" }} className={`w-0.5 ${available ? "bg-accent" : "bg-[var(--muted)]"}`} />
                   </button>
                 );
               })}
@@ -241,7 +248,10 @@ export function HomeExperience() {
               </div>
               <IconButton icon="close" label={t.common.close} onClick={() => setSelected(null)} />
             </div>
-            <p className="text-sm text-muted">{loc(sel.short, lang)}</p>
+            <p className="text-sm text-muted">{loc(sel.blurb, lang)}</p>
+            <p className="mt-1.5 text-[11px] text-muted">
+              {t.map.distance}: {(Math.hypot(...project(sel.lat, sel.lon)) / 1000).toFixed(1)} km
+            </p>
             {sel.status === "available" ? (
               <>
                 <ul className="mt-3 space-y-1.5 text-[13px]">
@@ -280,11 +290,22 @@ export function HomeExperience() {
                 </div>
               </>
             ) : (
-              <p className="mt-3 rounded-xl bg-amber-soft p-3 text-[13px] text-fg">
-                <Icon name="info" size={14} className="mr-1 inline text-amber" />
-                {t.map.comingSoonBody}
-              </p>
+              <>
+                <p className="mt-3 rounded-xl bg-amber-soft p-3 text-[13px] text-fg" role="status">
+                  <Icon name="clock" size={14} className="mr-1 inline text-amber" />
+                  {t.map.comingSoonBody}
+                </p>
+                <p className="mt-2 text-[11px] text-muted">{t.map.modelNote}</p>
+              </>
             )}
+            <a
+              className="mr-3 mt-3 inline-flex items-center gap-1 text-[11px] text-muted underline-offset-2 hover:underline"
+              href={sel.ref.url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <Icon name="image" size={11} /> {t.map.reference} ({sel.ref.label}) <Icon name="external" size={11} />
+            </a>
             <a
               className="mt-3 inline-flex items-center gap-1 text-[11px] text-muted underline-offset-2 hover:underline"
               href={`https://www.openstreetmap.org/${sel.osm}`}

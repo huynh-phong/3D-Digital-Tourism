@@ -8,7 +8,8 @@
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from "node:fs";
 import { createHash } from "node:crypto";
 
-const BBOX = { s: 10.7655, w: 106.6875, n: 10.7865, e: 106.7125 };
+// Detailed city: District 1/3 core plus Thảo Cầm Viên, Ba Son and Landmark 81 (Bình Thạnh).
+const BBOX = { s: 10.7655, w: 106.6875, n: 10.7995, e: 106.7265 };
 // Origin: centre of the Independence Palace main building (OSM way "Dinh Độc Lập").
 export const ORIGIN = { lat: 10.777017, lon: 106.695403 }; // OSM way 39598493 centroid
 
@@ -29,6 +30,10 @@ const queries = [
   way["leisure"="park"]${B};
   way["landuse"="grass"]${B};
   way["man_made"="bridge"]${B};
+  way["landuse"]${B};
+  way["leisure"~"^(garden|playground|pitch|zoo|theme_park|water_park)$"]${B};
+  way["tourism"~"^(zoo|theme_park|attraction)$"]${B};
+  way["amenity"~"^(parking|school|university|hospital)$"]${B};
 );out tags geom;`,
   `[out:json][timeout:180];(way["building"]${B};);out tags geom;`,
 ];
@@ -87,6 +92,7 @@ const roads = [];
 const buildings = [];
 const water = [];
 const green = [];
+const landuse = [];
 const bridges = [];
 
 const parseHeight = (t) => {
@@ -127,8 +133,13 @@ for (const w of ways) {
     buildings.push({ h: Math.round(h * 10) / 10, s: src === "none" ? undefined : 1, n: t.name || undefined, p: c.slice(0, -1) });
   } else if (t.natural === "water" || t.waterway === "riverbank") {
     water.push({ p: c });
-  } else if (t.leisure === "park" || t.landuse === "grass") {
+  } else if (t.leisure === "park" || t.landuse === "grass" || t.leisure === "garden" || t.tourism === "zoo" || t.leisure === "zoo") {
     green.push({ n: t.name || undefined, p: c });
+  } else if (t.landuse || t.leisure || t.tourism || t.amenity) {
+    // land use of gaps between footprints: decides what (if anything) may fill them
+    if (c.length < 4) continue;
+    const k = t.landuse || t.leisure || t.tourism || t.amenity;
+    landuse.push({ k, n: t.name || undefined, p: c.slice(0, -1) });
   } else if (t.man_made === "bridge") {
     bridges.push({ p: c });
   }
@@ -217,9 +228,10 @@ const out = {
   buildings,
   water,
   green,
+  landuse,
   bridges,
   waterways,
 };
 mkdirSync("public/data", { recursive: true });
 writeFileSync("public/data/city.json", JSON.stringify(out));
-console.log({ roads: roads.length, buildings: buildings.length, water: water.length, green: green.length, bridges: bridges.length });
+console.log({ landuse: landuse.length, roads: roads.length, buildings: buildings.length, water: water.length, green: green.length, bridges: bridges.length });

@@ -1,7 +1,12 @@
 "use client";
 
-import { INTERACTABLES, STOP_BY_ID, TOUR_STOPS } from "@/data/dinh/tour";
-import { floorFromY, LEVEL, ROOMS, STAIRS } from "@/data/dinh/layout";
+import { STOP_BY_ID, TOUR_STOPS } from "@/data/dinh/tour";
+import { floorFromY, ROOMS } from "@/data/dinh/layout";
+import type { Portal } from "@/data/dinh/interactions";
+import { INTERACTIONS } from "@/data/dinh/interactions";
+import { SPACE_BY_ID, spaceAt } from "@/data/dinh/spaces";
+import { interactionById, pickInteraction, portals } from "@/lib/interaction/system";
+import { activateSpace, failLoad, loadSpace, setRoomStatus, useWorld } from "@/lib/world/streaming";
 import { narrator, useNarrator } from "@/lib/audio/narrator";
 import { nextStopAfter } from "@/lib/knowledge/retrieve";
 import { runtime, useGame, useProgress, type TourMode } from "@/lib/store/game";
@@ -17,16 +22,6 @@ import { setDestination } from "./navigator";
  * In the guided tour the destination is the next stop; in free exploration
  * it is whatever the visitor picked, and Minh Anh leads only when asked.
  */
-
-/** Stair shortcuts (fade-teleport) at each end of the two shafts. */
-const sb = STAIRS[0], sr = STAIRS[1];
-const mid = (x0: number) => x0 + 2.3;
-export const STAIR_POINTS: { id: "stair-roof" | "stair-basement"; dir: "up" | "down"; at: Vec3; to: Vec3; yaw: number }[] = [
-  { id: "stair-roof", dir: "up", at: [mid(sr.x0), LEVEL.f1, -62.6], to: [mid(sr.x0), LEVEL.roof, -61], yaw: 0 },
-  { id: "stair-roof", dir: "down", at: [mid(sr.x0), LEVEL.roof, -62.2], to: [mid(sr.x0), LEVEL.f1, -61.6], yaw: 0 },
-  { id: "stair-basement", dir: "down", at: [mid(sb.x0), LEVEL.f1, -62.6], to: [mid(sb.x0), LEVEL.basement, -61.6], yaw: 0 },
-  { id: "stair-basement", dir: "up", at: [mid(sb.x0), LEVEL.basement, -62.6], to: [mid(sb.x0), LEVEL.f1, -61.6], yaw: 0 },
-];
 
 /** Stops already narrated automatically in this visit (avoid repeating). */
 const narrated = new Set<string>();
@@ -45,24 +40,17 @@ export function tickProximity() {
   const P = runtime.player;
 
   const floor = floorFromY(P[1]);
-  const room = ROOMS.find((r) => r.floor === floor && P[0] >= r.rect.x0 && P[0] <= r.rect.x1 && P[2] >= r.rect.z0 && P[2] <= r.rect.z1)?.id ?? null;
+  // the room name comes from the active space (rooms and spaces share ids where both exist)
+  const active = useWorld.getState().active;
+  const room = SPACE_BY_ID.get(active)!.room ?? ROOMS.find((r) => r.floor === floor && P[0] >= r.rect.x0 && P[0] <= r.rect.x1 && P[2] >= r.rect.z0 && P[2] <= r.rect.z1)?.id ?? null;
   if (floor !== g.floor || room !== g.room) useGame.setState({ floor, room });
 
   const stop = TOUR_STOPS.find((s) => same(s.position, P) && d2(s.position, P) < s.radius);
   const currentStopId = stop?.id ?? null;
 
-  let nearby: typeof g.nearby = null;
-  let best = Infinity;
-  for (const i of INTERACTABLES) {
-    const d = d2(i.position, P);
-    if (same(i.position, P) && d < i.radius && d < best) { best = d; nearby = { kind: "interactable", id: i.id }; }
-  }
-  for (let k = 0; k < STAIR_POINTS.length; k++) {
-    const s = STAIR_POINTS[k];
-    const d = d2(s.at, P);
-    if (Math.abs(s.at[1] - P[1]) < 1.2 && d < 2.2 && d < best) { best = d; nearby = { kind: "stairs", id: String(k) }; }
-  }
-  if (!nearby && stop) nearby = { kind: "stop", id: stop.id };
+  // the one interaction point to act on (none while a portal transition runs)
+  const pick = g.fade ? null : pickInteraction(P, runtime.playerYaw, INTERACTIONS.filter((i) => i.space === active && !i.walk));
+  const nearby = pick ? { id: pick.id } : null;
 
   if (currentStopId !== g.currentStopId || JSON.stringify(nearby) !== JSON.stringify(g.nearby)) {
     useGame.setState({ currentStopId, nearby });
@@ -156,34 +144,86 @@ export function setMode(mode: TourMode) {
   }
 }
 
-/** E key. */
+/** Interact key (F): act on the selected point only. */
 export function interact() {
   const g = useGame.getState();
+  if (portals.busy || g.fade) return; // a transition is running: ignore
   if (g.panel) {
     useGame.setState({ panel: null });
     return;
   }
-  const n = g.nearby;
-  if (!n) return;
-  if (n.kind === "stairs") {
-    const s = STAIR_POINTS[Number(n.id)];
-    useGame.setState({ panel: { kind: "stairs", id: s.id, dir: s.dir } });
-  } else if (n.kind === "interactable") {
-    useGame.setState({ panel: { kind: "interactable", id: n.id } });
-  } else {
-    narrated.add(n.id);
-    useProgress.getState().complete(n.id);
-    useGame.setState({ panel: { kind: "stop", id: n.id } });
-    playStop(n.id, "main");
+  const point = g.nearby ? interactionById(g.nearby.id) : null;
+  if (!point) return;
+  if (point.portal) {
+    enterPortal(point.portal);
+  } else if (point.kind === "exhibit" && point.ref) {
+    useGame.setState({ panel: { kind: "interactable", id: point.ref } });
+  } else if (point.kind === "stop" && point.ref) {
+    narrated.add(point.ref);
+    useProgress.getState().complete(point.ref);
+    useGame.setState({ panel: { kind: "stop", id: point.ref } });
+    playStop(point.ref, "main");
   }
 }
 
-export function takeStairs(id: "stair-roof" | "stair-basement", dir: "up" | "down") {
-  const s = STAIR_POINTS.find((p) => p.id === id && p.dir === dir);
-  if (!s) return;
-  useGame.getState().requestTeleport(s.to, s.yaw);
-  guideSignals.snapBehindPlayer = true;
-  useGame.setState({ panel: null });
+/**
+ * Spaces joined by a walked connection (the central staircase): when the
+ * visitor's own position is in the other space, that space is loaded and made
+ * active where they stand — no fade, no teleport. Both spaces own the
+ * stairwell's colliders (sharedRegions), so the flight stays solid meanwhile.
+ */
+let walking = false;
+export function tickPassages() {
+  if (walking || portals.busy || useGame.getState().fade || useGame.getState().phase !== "playing") return;
+  const active = useWorld.getState().active;
+  const P = runtime.player;
+  if (!INTERACTIONS.some((i) => i.walk && i.space === active)) return;
+  const here = spaceAt(P);
+  if (here === active || !INTERACTIONS.some((i) => i.walk && i.space === active && i.portal?.space === here)) return;
+  walking = true;
+  loadSpace(here)
+    .then(() => {
+      activateSpace(here);
+      guideSignals.snapBehindPlayer = true;
+      setRoomStatus("ROOM_ACTIVE");
+    })
+    .catch((err: Error) => failLoad(here, err))
+    .finally(() => {
+      walking = false;
+    });
+}
+
+/** Last door that failed to load its space (for "try again"). */
+let lastFailed: Portal | null = null;
+export const retryLastPortal = () => lastFailed && enterPortal(lastFailed);
+
+/**
+ * Through a door: load the target space behind a fade, switch to it (the
+ * space left goes to the cache or is freed), move the visitor, bring Minh Anh.
+ */
+export function enterPortal(portal: Portal) {
+  void portals.run(portal, {
+    setFade: (fade) => useGame.setState(fade ? { fade, nearby: null, panel: null } : { fade }),
+    load: (space) => loadSpace(space),
+    activate: (space) => {
+      setRoomStatus("TRANSITIONING");
+      activateSpace(space);
+      lastFailed = null;
+    },
+    failed: (space, err) => {
+      failLoad(space, err);
+      lastFailed = portal;
+      console.warn(`[spaces] could not load ${space}:`, err.message);
+    },
+    teleport: (to, yaw) => useGame.getState().requestTeleport(to, yaw),
+    position: () => runtime.player,
+    arrived: () => {
+      guideSignals.snapBehindPlayer = true;
+      runtime.input = { x: 0, y: 0, run: false, jump: false };
+      setRoomStatus("ROOM_ACTIVE");
+    },
+    wait: (ms) => new Promise((r) => setTimeout(r, ms)),
+  });
 }
 
 export function callGuide() {

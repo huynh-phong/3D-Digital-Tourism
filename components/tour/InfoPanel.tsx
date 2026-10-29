@@ -7,7 +7,7 @@ import { FACT_BY_ID } from "@/data/dinh/sources";
 import { narrator } from "@/lib/audio/narrator";
 import { loc, useLang, useT } from "@/lib/i18n";
 import { useGame } from "@/lib/store/game";
-import { navigateTo, playStop, takeStairs } from "@/lib/tour/director";
+import { navigateTo, playStop } from "@/lib/tour/director";
 import { destKey } from "@/lib/tour/destinations";
 import { Icon } from "@/components/ui/Icon";
 import { Button, IconButton, StatusBadge } from "@/components/ui/primitives";
@@ -91,17 +91,6 @@ export function InfoPanel() {
           <Button size="sm" icon="map" onClick={() => { navigateTo(destKey("interactable", i.id)); close(); }}>{t.nav.directions}</Button>
         </div>
         <Sources urls={k?.source_urls ?? []} />
-      </>
-    );
-  } else if (panel?.kind === "stairs") {
-    title = panel.id === "stair-roof" ? t.tour.stairsUp : t.tour.stairsDown;
-    body = (
-      <>
-        <p className="text-[13.5px]">{t.tour.shortcutNote}</p>
-        <div className="mt-3 flex gap-2">
-          <Button variant="primary" icon="stairs" onClick={() => takeStairs(panel.id, panel.dir)}>{t.tour.useStairs}</Button>
-          <Button onClick={close}>{t.common.close}</Button>
-        </div>
       </>
     );
   } else if (panel?.kind === "complete") {

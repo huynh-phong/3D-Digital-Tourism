@@ -11,7 +11,7 @@ export interface Frame {
 }
 
 /** Oriented box of the OSM footprint containing (x, z); null if none. */
-export function footprintFrame(data: CityData, x: number, z: number): Frame | null {
+export function footprintFrame(data: CityData, x: number, z: number, near = 0): Frame | null {
   let best: P2[] | null = null;
   let bestArea = Infinity;
   for (const b of data.buildings) {
@@ -20,6 +20,15 @@ export function footprintFrame(data: CityData, x: number, z: number): Frame | nu
     for (const q of b.p) { minX = Math.min(minX, q[0]); maxX = Math.max(maxX, q[0]); minZ = Math.min(minZ, q[1]); maxZ = Math.max(maxZ, q[1]); }
     const area = (maxX - minX) * (maxZ - minZ);
     if (area < bestArea) { bestArea = area; best = b.p; }
+  }
+  if (!best && near > 0) {
+    // the anchor may sit just outside the outline (e.g. an entrance node): nearest footprint centroid
+    let bd = near;
+    for (const b of data.buildings) {
+      const cx = b.p.reduce((s, q) => s + q[0], 0) / b.p.length, cz = b.p.reduce((s, q) => s + q[1], 0) / b.p.length;
+      const d = Math.hypot(cx - x, cz - z);
+      if (d < bd && b.p.length > 4) { bd = d; best = b.p; }
+    }
   }
   if (!best) return null;
   let longest = 0, ang = 0;

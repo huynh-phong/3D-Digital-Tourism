@@ -100,8 +100,8 @@ export function composeOfflineAnswer(question: string, lang: Lang, ctx: TourCont
   if (intent === "free_explore") {
     return {
       answer: lang === "vi"
-        ? "Tất nhiên! Chọn “Tự do khám phá” ở menu tạm dừng (Esc). Bạn có thể đi đến mọi khu vực đã mở, nhấn E gần các điểm thông tin, và gọi mình bằng phím G khi cần."
-        : "Of course! Choose “Free exploration” in the pause menu (Esc). Walk anywhere that's open, press E near info points, and call me with G whenever you like.",
+        ? "Tất nhiên! Chọn “Tự do khám phá” ở menu tạm dừng (Esc). Bạn có thể đi đến mọi khu vực đã mở, nhấn F gần các điểm thông tin, và gọi mình bằng phím G khi cần."
+        : "Of course! Choose “Free exploration” in the pause menu (Esc). Walk anywhere that's open, press F near info points, and call me with G whenever you like.",
       entries: [],
     };
   }

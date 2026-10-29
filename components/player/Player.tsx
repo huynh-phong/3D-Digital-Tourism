@@ -86,7 +86,8 @@ export function Player({
     const c = cam.current;
     if (!rb || !ctrl || !c) return;
     const collider = rb.collider(0) as unknown as Collider;
-    const playing = phase === "playing";
+    // frozen while a door / stair transition fades
+    const playing = phase === "playing" && !useGame.getState().fade;
 
     // ---- input
     const keys = held.current;

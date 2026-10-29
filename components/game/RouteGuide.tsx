@@ -7,8 +7,11 @@ import { INTERACTABLES, TOUR_STOPS } from "@/data/dinh/tour";
 import { usePointerLock } from "@/lib/game/pointer";
 import { useGame, useProgress } from "@/lib/store/game";
 import { DEST_BY_KEY, destKey } from "@/lib/tour/destinations";
-import { STAIR_POINTS, navigateTo } from "@/lib/tour/director";
-import { navRuntime } from "@/lib/tour/navigator";
+import { navigateTo } from "@/lib/tour/director";
+import { useWorld } from "@/lib/world/streaming";
+import { spaceAt } from "@/data/dinh/spaces";
+import { INTERACTIONS } from "@/data/dinh/interactions";
+import { navTarget, navRuntime } from "@/lib/tour/navigator";
 import type { Vec3 } from "@/types";
 
 const ROUTE_COLOR = new THREE.Color("#2fd3ea");
@@ -150,9 +153,10 @@ export function DestinationMarker() {
     if (!d || g.phase === "loading") {
       k.scale = Math.max(0, k.scale - dt * 4);
     } else {
-      // stand-in point when the exact spot is blocked
+      // stand-in point when the exact spot is blocked; the door on the way when it is in another space
       const r = navRuntime.route;
-      const at: Vec3 = r && !r.exact ? r.points[r.points.length - 1] : d.point;
+      const tgt = navTarget(d);
+      const at: Vec3 = r && !r.exact ? r.points[r.points.length - 1] : tgt?.point ?? d.point;
       grp.position.set(at[0], at[1], at[2]);
       const arrived = g.navStatus === "arrived";
       k.arrivedT = arrived ? k.arrivedT + dt : 0;
@@ -209,6 +213,7 @@ export const markerClick = { at: 0 };
 
 export function Markers() {
   const completed = useProgress((s) => s.completed);
+  const active = useWorld((w) => w.active);
   const destination = useGame((s) => s.destination);
   const group = useRef<THREE.Group>(null);
   useFrame((s) => {
@@ -221,9 +226,9 @@ export function Markers() {
     () => [
       ...TOUR_STOPS.map((s) => ({ key: destKey("stop", s.id), p: s.position, color: completed.includes(s.id) ? "#8a9a90" : "#1f9d63", size: 0.26 })),
       ...INTERACTABLES.map((i) => ({ key: destKey("interactable", i.id), p: i.position, color: "#d4a017", size: 0.2 })),
-      ...STAIR_POINTS.map((s, k) => ({ key: `stairs:${k}`, p: s.at, color: "#8a6a4e", size: 0.18 })),
-    ],
-    [completed],
+      ...INTERACTIONS.filter((s) => s.kind === "stairs" || s.kind === "hint").map((s) => ({ key: `stairs:${s.id}`, p: s.at, color: "#8a6a4e", size: 0.18 })),
+    ].filter((it) => spaceAt(it.p) === active), // markers of unloaded spaces are not drawn
+    [completed, active],
   );
   const click = (key: string) => (e: ThreeEvent<MouseEvent>) => {
     if (usePointerLock.getState().locked || key.startsWith("stairs:")) return;

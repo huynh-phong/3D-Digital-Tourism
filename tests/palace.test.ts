@@ -15,8 +15,8 @@ const nav = new NavGraph(model.nav.nodes, model.nav.edges);
 describe("navigation graph", () => {
   it("connects the gate to every tour stop and interactable", () => {
     const targets: Vec3[] = [
-      ...TOUR_STOPS.map((s) => s.guideSpot),
-      ...TOUR_STOPS.map((s) => s.position),
+      ...TOUR_STOPS.filter((s) => s.floor !== "f2").map((s) => s.guideSpot),
+      ...TOUR_STOPS.filter((s) => s.floor !== "f2").map((s) => s.position),
       ...INTERACTABLES.map((i) => i.position),
     ];
     for (const t of targets) {

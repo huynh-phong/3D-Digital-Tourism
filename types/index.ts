@@ -29,7 +29,8 @@ export interface Fact {
 /** Vec3 in metres inside the Dinh Độc Lập scene. +y up, gate at +z. */
 export type Vec3 = [number, number, number];
 
-export type FloorId = "grounds" | "f1" | "basement" | "roof";
+/** f1 = tầng 1 (entrance floor, called "lầu một" by the site), f2 = tầng 2. */
+export type FloorId = "grounds" | "f1" | "f2" | "basement" | "roof";
 
 export interface KnowledgeEntry {
   id: string;
@@ -104,17 +105,28 @@ export interface Interactable {
 
 export type LandmarkStatus = "available" | "coming_soon";
 
+export type LandmarkKind =
+  | "palace" | "cathedral" | "postoffice" | "museum" | "wharf" | "market"
+  | "landmark81" | "tower" | "zoo" | "bridge";
+
 export interface Landmark {
+  /** stable id (URLs, analytics, tests) */
   id: string;
   name: Localized;
+  /** short label for far zoom levels */
   short: Localized;
+  blurb: Localized;
   status: LandmarkStatus;
-  /** WGS84 from OpenStreetMap (element id recorded for verification). */
+  /** WGS84 representative point from OpenStreetMap (element id recorded for verification). */
   lat: number;
   lon: number;
   osm: string;
-  kind: "palace" | "cathedral" | "postoffice" | "market" | "street" | "theatre" | "tower" | "hall" | "riverside";
+  /** what the model is fitted to */
+  geometry: "footprint" | "boundary" | "line";
+  kind: LandmarkKind;
   route?: string;
+  /** reference images / official page (linked, never re-hosted) */
+  ref: { url: string; label: string };
 }
 
 export interface NavNode {

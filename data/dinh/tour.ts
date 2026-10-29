@@ -11,8 +11,9 @@ const OFFICIAL_MAP: Localized = {
 };
 
 /**
- * Guided tour. Order follows a natural walk: gate → lawn → façade → rooms →
- * basement → roof. Every sentence here is backed by a fact in sources.ts.
+ * Guided tour. Order follows a natural walk: gate → lawn → façade → the floor-1
+ * rooms in the official order around the hall (Cabinet right, Banquet left,
+ * Khánh tiết behind the staircase) → floor 2 (Credentials Room) → basement → roof. Every sentence here is backed by a fact in sources.ts.
  */
 export const TOUR_STOPS: TourStop[] = [
   {
@@ -123,39 +124,8 @@ export const TOUR_STOPS: TourStop[] = [
     spatial_note: SIM,
   },
   {
-    id: "stop-credentials",
-    order: 4,
-    title: { vi: "Phòng Trình Quốc thư", en: "Credentials Presentation Room" },
-    floor: "f1",
-    position: [0, LEVEL.f1, -42],
-    guideSpot: [3, LEVEL.f1, -45],
-    lookAt: [0, LEVEL.f1 + 2, -58],
-    radius: 7,
-    knowledge_ids: ["k-credentials", "k-symbolism"],
-    narration: {
-      quick: {
-        vi: "Chúng ta đang ở Phòng Trình Quốc thư — không gian nằm ở trung tâm của Dinh.",
-        en: "We are in the Credentials Presentation Room — the space at the very centre of the palace.",
-      },
-      main: {
-        vi: "Theo mô tả chính thức, mặt bằng Dinh được bố trí theo hình chữ Cát, và trung tâm của Dinh chính là Phòng Trình Quốc thư. Như tên gọi, đây là không gian nghi lễ. Trong lộ trình tham quan được đổi mới, Phòng Trình Quốc thư là một trong những vị trí có bảng giới thiệu ba thứ tiếng Việt, Anh, Pháp. Các phòng trong Dinh được trang trí bằng tranh sơn mài và sơn dầu với chủ đề non sông cẩm tú, và nội thất dùng những đường nét thẳng, mạch lạc. Mình cần nói rõ: kích thước phòng và đồ vật bạn đang thấy là mô phỏng, vì trang chính thức không công bố bản vẽ chi tiết của căn phòng.",
-        en: "According to the official description, the palace plan follows the character Cát, and its centre is the Credentials Presentation Room. As the name says, it is a ceremonial space. On the renewed visitor route it is one of the places with a trilingual panel in Vietnamese, English and French. The palace's rooms are decorated with lacquer and oil paintings on the theme of a beautiful homeland, and the interiors use straight, clear lines. To be clear: the room size and objects you see here are simulated, as no detailed drawings of this room are published.",
-      },
-      deep: {
-        vi: "Mình chưa có tư liệu đã xác minh về những buổi trình quốc thư cụ thể diễn ra tại đây, nên sẽ không kể chi tiết. Nếu bạn muốn tìm hiểu, hãy xem bảng giới thiệu tại Dinh hoặc trang dinhdoclap.gov.vn.",
-        en: "I don't have verified records of specific credential ceremonies held here, so I won't invent details. To learn more, see the panels at the palace or dinhdoclap.gov.vn.",
-      },
-    },
-    timeline: [],
-    media: [
-      { id: "m-credentials", caption: { vi: "Phòng Trình Quốc thư", en: "Credentials Presentation Room" }, page_url: "https://dinhdoclap.gov.vn/kien-truc-dinh-doc-lap/", credit: "dinhdoclap.gov.vn" },
-    ],
-    spatial_confidence: "estimated",
-    spatial_note: SIM,
-  },
-  {
     id: "stop-cabinet",
-    order: 5,
+    order: 4,
     title: { vi: "Phòng họp Hội đồng Nội các", en: "Cabinet Meeting Room" },
     floor: "f1",
     position: [24, LEVEL.f1, -22],
@@ -185,13 +155,137 @@ export const TOUR_STOPS: TourStop[] = [
     spatial_note: SIM,
   },
   {
-    id: "stop-basement",
+    id: "stop-dai-yen",
+    order: 5,
+    title: { vi: "Phòng Đại yến", en: "State Banquet Room" },
+    floor: "f1",
+    position: [-24, LEVEL.f1, -20.2],
+    guideSpot: [-27, LEVEL.f1, -19.2],
+    lookAt: [-44.8, LEVEL.f1 + 2.6, -23],
+    radius: 6,
+    knowledge_ids: ["k-dai-yen"],
+    narration: {
+      quick: {
+        vi: "Đây là Phòng Đại yến, bên trái sảnh lầu một.",
+        en: "This is the State Banquet Room, to the left of the entrance hall.",
+      },
+      main: {
+        vi: "Theo trang chính thức, bước vào sảnh, bên trái là phòng Đại yến. Ở cuối phòng là bức sơn dầu “Sơn Hà Cẩm Tú”. Điều thú vị là tác giả chính là kiến trúc sư Ngô Viết Thụ — người thiết kế Dinh. Ông hoàn thành bức tranh chỉ trong mười ngày để kịp lễ khánh thành ngày 31 tháng 10 năm 1966, và dùng chất liệu sơn dầu phương Tây để nói lên một tâm hồn Việt Nam. Bàn tiệc dài, ghế tựa cao và những bình gốm trên bệ gỗ bạn thấy được dựng theo ảnh tư liệu; kích thước và vị trí là ước lượng, bề mặt tranh chỉ là minh họa.",
+        en: "According to the official site, entering the hall, the Banquet Room is on the left. At the end of the room hangs the oil painting “Sơn Hà Cẩm Tú”. Remarkably, its author is the architect Ngô Viết Thụ — the palace's designer. He finished it in only ten days for the inauguration on 31 October 1966, using Western oil painting to express a Vietnamese soul. The long table, high-backed chairs and vases on wooden pedestals were modelled from reference photos; sizes and positions are estimates and the painted surface is only illustrative.",
+      },
+      deep: {
+        vi: "Trong diễn văn khánh thành, kiến trúc sư gọi nơi này là “phòng ăn lớn” và nói bức tranh tóm tắt những khuôn phép ông dùng khi thiết kế Dinh.",
+        en: "In his inauguration speech the architect called this room “the large dining room” and said the painting summed up the principles he used in designing the palace.",
+      },
+    },
+    timeline: [],
+    media: [
+      { id: "m-dai-yen", caption: { vi: "Sơn Hà Cẩm Tú", en: "Sơn Hà Cẩm Tú" }, page_url: "https://dinhdoclap.gov.vn/son-ha-cam-tu-loi-gui-gam-trong-thiet-ke-dinh-doc-lap/", credit: "dinhdoclap.gov.vn" },
+    ],
+    spatial_confidence: "estimated",
+    spatial_note: SIM,
+  },
+  {
+    id: "stop-khanh-tiet",
     order: 6,
+    title: { vi: "Phòng Khánh tiết", en: "Khánh tiết Room" },
+    floor: "f1",
+    position: [0, LEVEL.f1, -48.2],
+    guideSpot: [3, LEVEL.f1, -49],
+    lookAt: [0, LEVEL.f1 + 2.4, -44],
+    radius: 6,
+    knowledge_ids: ["k-khanh-tiet"],
+    narration: {
+      quick: {
+        vi: "Chúng ta đang ở Phòng Khánh tiết, phía sau cầu thang trung tâm.",
+        en: "We are in the Khánh tiết Room, behind the central staircase.",
+      },
+      main: {
+        vi: "Trang chính thức mô tả: phía trước sảnh là cầu thang trung tâm dẫn lên lầu hai, và phía sau cầu thang là không gian gần như ẩn mình của phòng Khánh tiết. Ở phía đầu phòng là bức tranh thủy mặc “Việt Nam Quốc Tổ” của họa sĩ Trọng Nội, dài 5,6 mét, ghép từ 8 tấm. Giữa tranh là Quốc Tổ Hùng Vương ngồi giữa hai hàng bá quan, tay cầm bút viết hai chữ “Văn Lang”. Ngày 22 tháng 10 năm 1966, họa sĩ viết thư xin tặng tác phẩm và từ chối nhận thù lao. Thảm đỏ hoa văn, cột gỗ, trần ô và đèn pha lê được dựng theo ảnh; kích thước phòng là ước lượng.",
+        en: "The official site describes it: ahead of the hall the central staircase leads up, and behind it lies the almost hidden Khánh tiết Room. At the head of the room is the ink painting “Việt Nam Quốc Tổ” by Trọng Nội, 5.6 metres long in 8 panels. At its centre the Hùng King sits between two rows of mandarins, writing the words “Văn Lang”. On 22 October 1966 the painter offered the work as a gift and declined any fee. The patterned red carpet, wooden pilasters, coffered ceiling and crystal chandeliers follow the photos; the room's size is an estimate.",
+      },
+      deep: {
+        vi: "Ban Trang trí đã xin ý kiến kiến trúc sư Ngô Viết Thụ và kỹ sư Phan Văn Điển về việc treo tác phẩm tại phòng Khánh tiết. Bề mặt tranh trong mô phỏng chỉ là minh họa thủy mặc, không phải bản sao.",
+        en: "The decoration committee consulted the architect Ngô Viết Thụ and engineer Phan Văn Điển about hanging the work in this room. The surface here is only an ink-wash illustration, not a copy.",
+      },
+    },
+    timeline: [],
+    media: [
+      { id: "m-khanh-tiet", caption: { vi: "Việt Nam Quốc Tổ", en: "Việt Nam Quốc Tổ" }, page_url: "https://dinhdoclap.gov.vn/hanh-trinh-60-nam-cua-buc-tranh-thuy-mac-viet-nam-quoc-to/", credit: "dinhdoclap.gov.vn" },
+    ],
+    spatial_confidence: "estimated",
+    spatial_note: SIM,
+  },
+  {
+    id: "stop-credentials",
+    order: 7,
+    title: { vi: "Phòng Trình Quốc thư", en: "Credentials Presentation Room" },
+    floor: "f2",
+    position: [0, LEVEL.f2, -24],
+    guideSpot: [-3.2, LEVEL.f2, -22.8],
+    lookAt: [0, LEVEL.f2 + 2.9, -12],
+    radius: 6,
+    knowledge_ids: ["k-credentials", "k-symbolism"],
+    narration: {
+      quick: {
+        vi: "Đây là Phòng Trình Quốc thư — trang chính thức gọi đây là trung tâm của Dinh.",
+        en: "This is the Credentials Presentation Room — the official site calls it the centre of the palace.",
+      },
+      main: {
+        vi: "Mặt bằng Dinh theo hình chữ Cát, và trung tâm của Dinh là Phòng Trình Quốc thư. Bức sơn mài lớn trước mặt bạn là “Bình Ngô Đại Cáo” của họa sĩ Nguyễn Văn Minh, rộng 8,20 mét, cao 4,70 mét, do công ty Mỹ nghệ Mê Linh thực hiện giữa năm 1966. Tranh thể hiện buổi đại lễ sau thắng lợi khởi nghĩa Lam Sơn: các hàng người, cờ xí ở trung tâm, dãy Trường Sơn trải dài phía sau và ruộng đồng, nhà cửa phía dưới. Mình cần nói rõ: bề mặt tranh trong mô phỏng chỉ là minh họa đúng chất liệu và kích thước, không phải bản sao tác phẩm; vị trí của phòng trên tầng 2 cũng là ước lượng.",
+        en: "The palace plan follows the character Cát, and its centre is the Credentials Presentation Room. The great lacquer painting before you is “Bình Ngô Đại Cáo” by Nguyễn Văn Minh, 8.20 metres wide and 4.70 metres tall, made by the Mê Linh fine-arts company in mid-1966. It shows the ceremony after the Lam Sơn uprising's victory: ranks of people and banners in the centre, the Trường Sơn range behind and fields and houses below. To be clear: the painted surface here only illustrates the medium and size, it is not a copy of the work; the room's position on floor 2 is also an estimate.",
+      },
+      deep: {
+        vi: "“Bình Ngô Đại Cáo” của Nguyễn Trãi thường được gọi là bản tuyên ngôn độc lập thứ hai của dân tộc. Theo hồ sơ lưu trữ, bức tranh được xếp vào nhóm công trình mỹ thuật “dành riêng”, không đấu giá như một số thiết bị nội thất khác.",
+        en: "Nguyễn Trãi's “Bình Ngô Đại Cáo” is often called the nation's second declaration of independence. According to the archives, the painting was listed among the works of art “reserved” for the palace, not auctioned like some furnishings.",
+      },
+    },
+    timeline: [],
+    media: [
+      { id: "m-credentials", caption: { vi: "Bình Ngô Đại Cáo – sơn mài", en: "Bình Ngô Đại Cáo – lacquer" }, page_url: "https://dinhdoclap.gov.vn/binh-ngo-dai-cao-tu-ang-hung-van-den-sac-voc-son-mai/", credit: "dinhdoclap.gov.vn" },
+    ],
+    spatial_confidence: "estimated",
+    spatial_note: SIM,
+  },
+  {
+    id: "stop-pres-reception",
+    order: 8,
+    title: { vi: "Phòng Tiếp khách Tổng thống", en: "President's Reception Room" },
+    floor: "f2",
+    position: [-18, LEVEL.f2, -19],
+    guideSpot: [-14.6, LEVEL.f2, -20.6],
+    lookAt: [-18, LEVEL.f2 + 2.2, -31],
+    radius: 6,
+    knowledge_ids: ["k-pres-reception"],
+    narration: {
+      quick: {
+        vi: "Đây là Phòng Tiếp khách Tổng thống ở tầng 2.",
+        en: "This is the President's Reception Room on floor 2.",
+      },
+      main: {
+        vi: "Theo trang chính thức của Dinh, trong phòng Tiếp khách Tổng thống có hai chiếc tủ sơn mài đỏ thẫm. Bốn cánh tủ được vẽ vàng đề tài “Mai – Lan” và “Cúc – Trúc” bởi trang trí gia Nguyễn Văn Triêm, theo phiếu đặt hàng ngày 4 tháng 1 năm 1967; dưới cánh tủ bên trái còn dấu triện “Triêm – Trang trí gia – 1966”. Bộ sofa gấm vàng, tấm thảm đỏ có chữ Thọ và khám gỗ với đôi ngà voi được dựng theo ảnh chụp. Mình nói rõ: vị trí phòng trong tầng là ước lượng, và họa tiết trên cánh tủ ở đây chỉ là minh họa.",
+        en: "According to the palace's official site, the President's Reception Room holds two deep-red lacquer cabinets. Their four doors were painted in gold with Plum–Orchid and Chrysanthemum–Bamboo by the decorator Nguyễn Văn Triêm, ordered on 4 January 1967; under the left door his seal still reads “Triêm – decorator – 1966”. The gold damask sofas, the red carpet with the longevity character and the wood niche with elephant tusks follow the photographs. To be clear: the room's position on the floor is an estimate, and the cabinet painting here is only illustrative.",
+      },
+      deep: {
+        vi: "Mai, Lan, Cúc, Trúc là bộ tứ quân tử trong mỹ thuật phương Đông, tượng trưng cho bốn mùa và phẩm chất người quân tử.",
+        en: "Plum, orchid, chrysanthemum and bamboo are the “four gentlemen” of East Asian art, standing for the four seasons and a noble character.",
+      },
+    },
+    timeline: [],
+    media: [
+      { id: "m-pres-reception", caption: { vi: "Tủ sơn mài phòng Tiếp khách Tổng thống", en: "Lacquer cabinets of the President's Reception Room" }, page_url: "https://dinhdoclap.gov.vn/nhung-net-ve-mai-lan-cuc-truc-tren-tu-phong-tiep-khach-tong-thong/", credit: "dinhdoclap.gov.vn" },
+    ],
+    spatial_confidence: "estimated",
+    spatial_note: SIM,
+  },
+  {
+    id: "stop-basement",
+    order: 9,
     title: { vi: "Tầng hầm", en: "The basement" },
     floor: "basement",
-    position: [-8, LEVEL.basement, -52],
-    guideSpot: [-5, LEVEL.basement, -55],
-    lookAt: [-16, LEVEL.basement + 1.2, -46],
+    position: [7, LEVEL.basement, -45.5],
+    guideSpot: [4.2, LEVEL.basement, -46.5],
+    lookAt: [12.5, LEVEL.basement + 1.5, -40.2],
     radius: 7,
     knowledge_ids: ["k-basement"],
     narration: {
@@ -218,7 +312,7 @@ export const TOUR_STOPS: TourStop[] = [
   },
   {
     id: "stop-roof",
-    order: 7,
+    order: 10,
     title: { vi: "Sân thượng và dấu mốc lịch sử", en: "Rooftop and historic moments" },
     floor: "roof",
     position: [0, LEVEL.roof, -26.5],

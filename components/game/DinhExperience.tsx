@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef } from "react";
 import { useMediaQuery } from "@/lib/useMedia";
 import { useVisitKey } from "@/lib/useVisitKey";
-import { INTERACTABLES, STOP_BY_ID } from "@/data/dinh/tour";
+import { INTERACTION_BY_ID } from "@/data/dinh/interactions";
 import { ROOMS } from "@/data/dinh/layout";
 import { narrator } from "@/lib/audio/narrator";
 import { useKeyboard } from "@/lib/game/input";
@@ -14,7 +14,7 @@ import { installPointerLockListeners, lockPointer, releasePointer, togglePointer
 import { loc, useLang, useT } from "@/lib/i18n";
 import { runtime, useGame, useProgress } from "@/lib/store/game";
 import { keyLabel, useSettings, type Action } from "@/lib/store/settings";
-import { askGuideToLead, callGuide, cancelNavigation, continueTour, interact, navigateTo, resetNarrated, setMode, STAIR_POINTS, watchNarrationEnd } from "@/lib/tour/director";
+import { askGuideToLead, callGuide, cancelNavigation, continueTour, interact, navigateTo, resetNarrated, setMode, watchNarrationEnd } from "@/lib/tour/director";
 import { navRuntime } from "@/lib/tour/navigator";
 import { GuideCard } from "@/components/guide/GuideCard";
 import { FloorMap } from "@/components/tour/FloorMap";
@@ -24,6 +24,7 @@ import { StopList } from "@/components/tour/StopList";
 import { GuideNotices, NavCard, PointerChip } from "@/components/tour/NavHud";
 import { markerClick } from "./RouteGuide";
 import { IconButton } from "@/components/ui/primitives";
+import { Icon } from "@/components/ui/Icon";
 import { TopControls } from "@/components/ui/TopControls";
 import { useReducedMotion } from "@/components/ui/Providers";
 import { WebGLGate } from "@/components/ui/WebGLGate";
@@ -46,6 +47,7 @@ export function DinhExperience() {
   const room = useGame((s) => s.room);
   const nearby = useGame((s) => s.nearby);
   const camMode = useGame((s) => s.camMode);
+  const fade = useGame((s) => s.fade);
   const cam = useRef<CameraState>({ yaw: SPAWN.yaw, pitch: -0.28, dist: 4.6 });
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const chatRef = useRef<HTMLInputElement>(null);
@@ -61,7 +63,7 @@ export function DinhExperience() {
     runtime.input = { x: 0, y: 0, run: false, jump: false };
     cam.current = { yaw: SPAWN.yaw, pitch: -0.28, dist: 4.6 };
     useGame.setState({
-      phase: "loading", panel: null, mapOpen: false, chatOpen: false, targetStopId: null, currentStopId: null, nearby: null,
+      phase: "loading", panel: null, mapOpen: false, chatOpen: false, targetStopId: null, currentStopId: null, nearby: null, fade: null,
       guideState: "WAITING", guideFar: false, guideLeading: false, guideNotice: null, destination: null, navStatus: "idle", navHint: null,
     });
   }, [sceneKey]);
@@ -76,6 +78,7 @@ export function DinhExperience() {
   useEffect(() => {
     if (process.env.NODE_ENV !== "production") {
       // Dev-only hook for manual QA (teleport, inspect state).
+      (window as unknown as Record<string, unknown>).__sg3dInteractions = INTERACTION_BY_ID;
       (window as unknown as Record<string, unknown>).__sg3d = { useGame, runtime, useProgress, cam, navRuntime, usePointerLock, director: { setMode, continueTour, navigateTo, cancelNavigation, askGuideToLead } };
       // Dev-only QA shortcut: #qa=x,y,z,yaw,pitch[,first] starts free play at that spot.
       const qa = /qa=([^&]+)/.exec(location.hash)?.[1]?.split(",");
@@ -171,13 +174,10 @@ export function DinhExperience() {
 
   const areaName =
     room ? loc(ROOMS.find((r) => r.id === room)!.name, lang) : t.tour.floors[floor];
-  let prompt: string | null = null;
-  if (nearby?.kind === "interactable") prompt = loc(INTERACTABLES.find((i) => i.id === nearby.id)!.title, lang);
-  else if (nearby?.kind === "stop") prompt = loc(STOP_BY_ID.get(nearby.id)!.title, lang);
-  else if (nearby?.kind === "stairs") {
-    const s = STAIR_POINTS[Number(nearby.id)];
-    prompt = s.id === "stair-roof" ? t.tour.stairsUp : t.tour.stairsDown;
-  }
+  // one prompt at a time, for the point the interaction system selected
+  const point = nearby ? INTERACTION_BY_ID.get(nearby.id) ?? null : null;
+  const prompt = point ? loc(point.prompt, lang) : null;
+  const passive = point?.kind === "hint";
   const playing = phase === "playing";
 
   return (
@@ -261,15 +261,26 @@ export function DinhExperience() {
         </div>
         {/* centre prompt */}
         <AnimatePresence>
-          {playing && prompt && (
-            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="absolute bottom-40 left-1/2 -translate-x-1/2 sm:bottom-28">
-              <button
-                type="button"
-                onClick={interact}
-                className="panel pointer-events-auto flex items-center gap-2 px-3 py-2 text-[13px] font-medium"
-              >
-                <span className="kbd">{keyLabel(keys.interact)}</span> {t.tour.interact}: {prompt}
-              </button>
+          {playing && !fade && prompt && (
+            <motion.div
+              key={point!.id}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              className="absolute bottom-40 left-1/2 -translate-x-1/2 sm:bottom-28"
+              role="status"
+              aria-live="polite"
+            >
+              {passive ? (
+                <p className="panel flex items-center gap-2 px-3 py-1.5 text-[12.5px] text-muted">
+                  <Icon name="stairs" size={14} /> {prompt}
+                </p>
+              ) : (
+                <button type="button" onClick={interact} className="panel pointer-events-auto flex items-center gap-2 px-3 py-2 text-[13px] font-medium">
+                  <span className="kbd">{touch ? t.tour.interact : keyLabel(keys.interact)}</span> {prompt}
+                </button>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -286,6 +297,13 @@ export function DinhExperience() {
       {touch && playing && (
         <TouchControls onInteract={interact} onCamera={() => useGame.setState({ camMode: useGame.getState().camMode === "first" ? "third" : "first" })} />
       )}
+
+      {/* portal transition (doors, stair shortcut) */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-40 bg-black transition-opacity ease-in-out"
+        style={{ opacity: fade === "out" ? 1 : 0, transitionDuration: fade === "out" ? "250ms" : "320ms" }}
+      />
 
       <ModeChooser onStart={() => { useGame.setState({ phase: "playing" }); lockPointer(canvas.current); }} />
       <PauseMenu onResume={resume} />

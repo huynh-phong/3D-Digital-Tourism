@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import * as THREE from "three";
 import { GROUNDS, PALACE } from "@/data/dinh/layout";
 import type { Frame } from "@/lib/city/footprint";
+import type { P2 } from "@/lib/city/types";
 
 /**
  * Stylised landmark models. They are recognisable silhouettes sized to the
@@ -214,6 +215,203 @@ export function Tower({ f }: { f: Frame }) {
       <mesh position={[0, 264, 0]} material={M.dark}>
         <cylinderGeometry args={[0.4, 0.8, 12]} />
       </mesh>
+    </group>
+  );
+}
+
+/* ------------------------------------------------------------------ new landmarks */
+const N = {
+  khaki: new THREE.MeshStandardMaterial({ color: "#7b8053", roughness: 0.8 }),
+  cable: new THREE.MeshStandardMaterial({ color: "#f3f4f6", roughness: 0.4 }),
+  glass81: new THREE.MeshStandardMaterial({ color: "#7fb2d6", roughness: 0.12, metalness: 0.7 }),
+  soil: new THREE.MeshStandardMaterial({ color: "#8a5a3b", roughness: 1 }),
+  jade: new THREE.MeshStandardMaterial({ color: "#2f9e7a", roughness: 0.6 }),
+  gold: new THREE.MeshStandardMaterial({ color: "#e0b042", roughness: 0.4, metalness: 0.4 }),
+  red: new THREE.MeshStandardMaterial({ color: "#d63c32", roughness: 0.6 }),
+  fence: new THREE.MeshStandardMaterial({ color: "#6b4f35", roughness: 0.9 }),
+  grey: new THREE.MeshStandardMaterial({ color: "#8d9399", roughness: 0.8 }),
+};
+
+function Cyl({ p, r, h, m, r2 }: { p: [number, number, number]; r: number; h: number; m: THREE.Material; r2?: number }) {
+  return (
+    <mesh position={p} material={m} castShadow>
+      <cylinderGeometry args={[r2 ?? r, r, h, 16]} />
+    </mesh>
+  );
+}
+
+/** War Remnants Museum: low block, entrance canopy, outdoor yard with aircraft and armour. */
+export function Museum({ f }: { f: Frame }) {
+  const L = Math.max(40, f.length), W = Math.max(25, f.width);
+  return (
+    <group position={[f.x, 0, f.z]} rotation={[0, f.angle, 0]}>
+      <Box p={[0, 7, 0]} s={[L * 0.9, 14, W * 0.85]} m={M.white} />
+      <Box p={[0, 14.6, 0]} s={[L * 0.92, 1.2, W * 0.88]} m={M.slate} />
+      <Box p={[0, 5, W * 0.45]} s={[L * 0.4, 0.8, 6]} m={M.dark} />
+      {/* display yard: helicopter, fighter jet, tank */}
+      <group position={[0, 0, W * 0.5 + 18]}>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.12, 0]} material={M.path}>
+          <planeGeometry args={[L, 28]} />
+        </mesh>
+        <group position={[-L * 0.3, 0, 0]}>
+          <Box p={[0, 2, 0]} s={[9, 2.6, 2.6]} m={N.khaki} />
+          <Box p={[6, 2.6, 0]} s={[6, 0.8, 0.8]} m={N.khaki} />
+          <Box p={[0, 3.7, 0]} s={[14, 0.15, 0.6]} m={M.dark} r={0.6} />
+        </group>
+        <group position={[0, 0, -2]}>
+          <Box p={[0, 2.2, 0]} s={[13, 1.6, 1.6]} m={N.grey} />
+          <Box p={[0, 2.2, 0]} s={[3.5, 0.3, 10]} m={N.grey} />
+          <Box p={[-5.5, 3.5, 0]} s={[1.6, 2.6, 0.3]} m={N.grey} />
+        </group>
+        <group position={[L * 0.3, 0, 3]}>
+          <Box p={[0, 1.3, 0]} s={[7, 1.8, 3.6]} m={N.khaki} />
+          <Box p={[0, 2.7, 0]} s={[3.4, 1.1, 2.6]} m={N.khaki} />
+          <Box p={[3.4, 2.8, 0]} s={[4.5, 0.35, 0.35]} m={M.dark} />
+        </group>
+      </group>
+    </group>
+  );
+}
+
+/** Nhà Rồng: colonial building whose ridge carries two dragons facing a moon. */
+export function Wharf({ f }: { f: Frame }) {
+  const L = Math.max(36, f.length), W = Math.max(18, f.width);
+  const dragon = (s: number) => (
+    <group position={[s * 3.2, 18.2, 0]} rotation={[0, s > 0 ? 0 : Math.PI, 0]}>
+      {[0, 1, 2, 3, 4].map((i) => (
+        <mesh key={i} position={[i * 0.9, Math.sin(i * 1.2) * 0.45 + 0.4, 0]} material={N.jade}>
+          <sphereGeometry args={[0.55 - i * 0.07, 8, 6]} />
+        </mesh>
+      ))}
+    </group>
+  );
+  return (
+    <group position={[f.x, 0, f.z]} rotation={[0, f.angle, 0]}>
+      <Box p={[0, 6, 0]} s={[L * 0.9, 12, W * 0.8]} m={M.cream} />
+      <Box p={[0, 3, W * 0.42]} s={[L * 0.9, 6, 2.5]} m={M.white} />
+      <Gable p={[0, 12, 0]} l={L * 0.95} w={W * 0.9} h={5.5} m={M.roofRed} />
+      <Box p={[0, 17.6, 0]} s={[L * 0.6, 0.4, 0.6]} m={M.roofRed} />
+      {dragon(1)}
+      {dragon(-1)}
+      <mesh position={[0, 18.8, 0]} material={N.gold}>
+        <sphereGeometry args={[0.8, 12, 8]} />
+      </mesh>
+      <Cyl p={[0, 9, W * 0.5 + 12]} r={0.2} h={18} m={M.white} />
+      <Box p={[1.6, 16.8, W * 0.5 + 12]} s={[3, 2, 0.05]} m={N.red} />
+    </group>
+  );
+}
+
+/**
+ * Landmark 81: nine square tubes of staggered heights (a bundle of bamboo)
+ * rising to a crown and spire, 461 m in all.
+ */
+export function Landmark81({ f }: { f: Frame }) {
+  const side = Math.min(70, Math.max(46, Math.min(f.length, f.width) * 0.9)) / 3;
+  const H = [300, 350, 300, 350, 400, 350, 300, 350, 300];
+  return (
+    <group position={[f.x, 0, f.z]} rotation={[0, f.angle, 0]}>
+      <Box p={[0, 12, 0]} s={[side * 4.2, 24, side * 4.2]} m={M.cream} />
+      {H.map((h, i) => {
+        const gx = (i % 3) - 1, gz = Math.floor(i / 3) - 1;
+        return (
+          <group key={i} position={[gx * side, 0, gz * side]}>
+            <mesh position={[0, h / 2, 0]} material={N.glass81} castShadow>
+              <boxGeometry args={[side * 0.98, h, side * 0.98]} />
+            </mesh>
+            <mesh position={[0, h + 1, 0]} material={M.white}>
+              <boxGeometry args={[side * 0.9, 2, side * 0.9]} />
+            </mesh>
+          </group>
+        );
+      })}
+      <mesh position={[0, 415, 0]} material={N.glass81}>
+        <cylinderGeometry args={[side * 0.25, side * 0.5, 30, 4]} />
+      </mesh>
+      <Cyl p={[0, 445, 0]} r={1.2} r2={0.3} h={32} m={M.white} />
+    </group>
+  );
+}
+
+/** Ba Son: one pylon on the Thủ Thiêm bank with fans of stay cables to the deck on both sides. */
+export function BaSonBridge({ line, pylon, deckY = 12 }: { line: P2[]; pylon: P2; deckY?: number }) {
+  let ux = 1, uz = 0, best = Infinity;
+  for (let i = 0; i < line.length - 1; i++) {
+    const a = line[i], b = line[i + 1];
+    const d = Math.hypot((a[0] + b[0]) / 2 - pylon[0], (a[1] + b[1]) / 2 - pylon[1]);
+    if (d < best) {
+      best = d;
+      const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      ux = (b[0] - a[0]) / l;
+      uz = (b[1] - a[1]) / l;
+    }
+  }
+  const yaw = -Math.atan2(uz, ux);
+  const H = 113;
+  const cables = useMemo(() => {
+    const out: { p: THREE.Vector3; q: THREE.Quaternion; len: number }[] = [];
+    const top = new THREE.Vector3(0, H - 6, 0);
+    for (const s of [1, -1]) for (let i = 1; i <= 9; i++) for (const side of [1, -1]) {
+      const end = new THREE.Vector3(s * i * 20, deckY + 1, side * 9);
+      const start = top.clone().add(new THREE.Vector3(0, -i * 2.2, side * 1.2));
+      const dir = end.clone().sub(start);
+      out.push({ p: start.clone().add(end).multiplyScalar(0.5), q: new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize()), len: dir.length() });
+    }
+    return out;
+  }, [deckY]);
+  return (
+    <group position={[pylon[0], 0, pylon[1]]} rotation={[0, yaw, 0]}>
+      {[1, -1].map((s) => (
+        <mesh key={s} position={[0, H * 0.42, s * 6]} rotation={[s * 0.1, 0, 0]} material={M.white} castShadow>
+          <boxGeometry args={[4, H * 0.85, 3]} />
+        </mesh>
+      ))}
+      <mesh position={[0, H * 0.92, 0]} material={M.white} castShadow>
+        <boxGeometry args={[4, H * 0.18, 4]} />
+      </mesh>
+      {cables.map((c, i) => (
+        <mesh key={i} position={c.p} quaternion={c.q} material={N.cable}>
+          <cylinderGeometry args={[0.15, 0.15, c.len, 4]} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/** Thảo Cầm Viên: main gate (two pillars and a sign) and animal enclosures inside the gardens. */
+export function ZooGate({ gate, yaw, pens }: { gate: P2; yaw: number; pens: P2[] }) {
+  return (
+    <group>
+      <group position={[gate[0], 0, gate[1]]} rotation={[0, yaw, 0]}>
+        {[-1, 1].map((s) => (
+          <Box key={s} p={[s * 8, 5, 0]} s={[2.4, 10, 2.4]} m={M.cream} />
+        ))}
+        <Box p={[0, 9.5, 0]} s={[19, 2, 1.4]} m={N.jade} />
+        <Gable p={[0, 10.5, 0]} l={20} w={4} h={2.5} m={M.roofRed} />
+      </group>
+      {pens.map((p, i) => (
+        <group key={i} position={[p[0], 0, p[1]]}>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.15, 0]} material={i % 2 ? N.soil : M.lawn}>
+            <circleGeometry args={[11, 20]} />
+          </mesh>
+          <mesh position={[0, 0.8, 0]} material={N.fence}>
+            <cylinderGeometry args={[11, 11, 1.6, 20, 1, true]} />
+          </mesh>
+          {i % 2 ? (
+            <group position={[2, 0, 0]}>
+              <Box p={[0, 2.2, 0]} s={[3.6, 2.2, 2]} m={N.grey} />
+              <Box p={[2.2, 2.6, 0]} s={[1.2, 1.4, 1.4]} m={N.grey} />
+              <Box p={[2.9, 1.4, 0]} s={[0.4, 1.8, 0.4]} m={N.grey} />
+            </group>
+          ) : (
+            <group position={[-2, 0, 1]}>
+              <Box p={[0, 2.4, 0]} s={[2.4, 1.2, 1]} m={N.gold} />
+              <Box p={[1.2, 4.4, 0]} s={[0.5, 3.4, 0.5]} m={N.gold} />
+              <Box p={[1.5, 6.1, 0]} s={[1, 0.5, 0.5]} m={N.gold} />
+            </group>
+          )}
+        </group>
+      ))}
     </group>
   );
 }

@@ -6,15 +6,17 @@ import { Physics } from "@react-three/rapier";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { buildPalace } from "@/lib/dinh/palaceModel";
-import { RoutePlanner } from "@/lib/dinh/route";
+import { spaceModel, spacePlanner } from "@/lib/dinh/spaceModel";
+import { disposePalaceTextures } from "@/lib/dinh/textures";
 import { runtime, useGame } from "@/lib/store/game";
+import { mountedSpaces, resetWorld, spaceReady, useWorld } from "@/lib/world/streaming";
+import { LIGHT_POOL, SPACE_BY_ID, type SpaceId } from "@/data/dinh/spaces";
 import type { Action, Quality } from "@/lib/store/settings";
-import { tickProximity } from "@/lib/tour/director";
+import { tickPassages, tickProximity } from "@/lib/tour/director";
 import { setPlanner, tickNavigator } from "@/lib/tour/navigator";
-import { LEVEL } from "@/data/dinh/layout";
 import { GuideNPC } from "@/components/guide/GuideNPC";
 import { Player, useLook, type CameraState } from "@/components/player/Player";
-import { PalaceColliders, PalaceGeometry } from "./Palace";
+import { SpaceView, usePalaceMaterials } from "./Palace";
 import { DestinationMarker, Markers, RouteLine } from "./RouteGuide";
 import { SPAWN } from "./spawn";
 
@@ -52,19 +54,41 @@ export default function DinhScene({ quality, reducedMotion, held, cam, onCanvas 
 }
 
 function World({ quality, reducedMotion, held, cam }: Omit<Props, "onCanvas">) {
+  // the whole palace as data (CPU); each space mounts only its own part
   const model = useMemo(() => buildPalace(), []);
-  // one planner for the visitor's directions and for Minh Anh
-  const planner = useMemo(() => new RoutePlanner(model), [model]);
+  // every visit starts outside, with nothing else mounted
+  useState(() => resetWorld("exterior"));
+  const active = useWorld((w) => w.active);
+  const loading = useWorld((w) => w.loading);
+  const cached = useWorld((w) => w.cached);
+  const debugAll = useWorld((w) => w.debugAll);
+  const mounted = mountedSpaces({ active, loading, cached, debugAll });
+  // the visitor's directions and Minh Anh plan inside the active space
+  const planner = useMemo(() => spacePlanner(spaceModel(model, active)), [model, active]);
   useEffect(() => {
     setPlanner(planner);
     return () => setPlanner(null);
   }, [planner]);
+  // materials and textures are shared by all spaces: owned here, freed with the scene
+  const { mats, extra } = usePalaceMaterials(quality);
+  useEffect(
+    () => () => {
+      Object.values(mats).forEach((m) => m.dispose());
+      Object.values(extra).forEach((m) => m.dispose());
+    },
+    [mats, extra],
+  );
+  useEffect(() => () => disposePalaceTextures(), []);
   const [introDone, setIntroDone] = useState(false);
   const [ready, setReady] = useState(false);
   const shadows = quality !== "low";
   const { gl, scene, camera } = useThree();
 
   useLook(cam, gl.domElement, introDone);
+  useEffect(() => {
+    // Dev-only QA hook: renderer statistics and the streaming state.
+    if (process.env.NODE_ENV !== "production") (window as unknown as Record<string, unknown>).__sg3dGl = { gl, scene, world: useWorld };
+  }, [gl, scene]);
 
   useEffect(() => {
     // Don't reveal the scene until every material is compiled (avoids a stutter
@@ -111,11 +135,22 @@ function World({ quality, reducedMotion, held, cam }: Omit<Props, "onCanvas">) {
       </Environment>
       <fog attach="fog" args={["#d5e0e8", 300, 1000]} />
       <Sun shadows={shadows} quality={quality} />
-      <Lighting />
+      <Lighting space={active} />
 
-      <PalaceColliders model={model} />
-      <PalaceGeometry model={model} quality={quality} />
+      {mounted.map((id) => (
+        <SpaceView
+          key={id}
+          sm={spaceModel(model, id)}
+          mode={id === active ? "active" : id === loading ? "loading" : debugAll ? "loading" : "cached"}
+          model={model}
+          mats={mats}
+          extra={extra}
+          quality={quality}
+          onReady={id === loading ? () => spaceReady(id) : undefined}
+        />
+      ))}
       <Player held={held} cam={cam} spawn={SPAWN} introDone={introDone} />
+      {/* one Minh Anh for the whole visit: she lives outside the spaces and follows the visitor between them */}
       <GuideNPC planner={planner} spawn={[3.2, 0, SPAWN.pos[2] - 2]} />
       <Markers />
       <RouteLine />
@@ -165,29 +200,33 @@ function Sun({ shadows, quality }: { shadows: boolean; quality: Quality }) {
 }
 
 /**
- * Interior fill: a handful of soft, shadowless point lights per room (neutral
- * warm white, not orange). Their intensity fades with the visitor's distance
- * from the building so the grounds don't pay for them; the light count never
- * changes, so no shader recompiles.
+ * Interior fill: a fixed pool of soft, shadowless point lights (neutral warm
+ * white) placed by the active space. The pool size never changes, so moving
+ * between spaces never recompiles shaders; outdoors the pool is off and the
+ * sky light is full, indoors the sky light is dimmed.
  */
-function Lighting() {
-  const pts: [number, number, number, number, number][] = [
-    // x, y, z, range, intensity
-    [-8, 5.3, -23, 20, 16], [8, 5.3, -23, 20, 16], [30, 5.2, -23, 20, 18], [-30, 5.2, -23, 16, 10],
-    [0, 5.2, -42, 18, 16], [0, 5.2, -54, 18, 16], [0, 5.2, -62, 16, 12],
-    [-10, -0.3, -50, 18, 14], [10, -0.3, -50, 16, 14], [0, -0.3, -62, 14, 10], [11.3, 12, -69, 30, 18],
-  ];
+function Lighting({ space }: { space: SpaceId }) {
   const lights = useRef<(THREE.PointLight | null)[]>([]);
   const hemi = useRef<THREE.HemisphereLight>(null);
   const scene = useThree((s) => s.scene);
   const k = useRef(0); // 0 outdoors … 1 inside the building
+  const pts = SPACE_BY_ID.get(space)!.lights;
+  const indoor = space !== "exterior" && space !== "roof";
+  useEffect(() => {
+    lights.current.forEach((l, i) => {
+      if (!l) return;
+      const p = pts[i];
+      if (p) {
+        l.position.set(p[0], p[1], p[2]);
+        l.distance = p[3];
+      }
+    });
+  }, [pts]);
   useFrame((_, dt) => {
-    const [x, y, z] = runtime.player;
-    const inside = x > -46 && x < 46 && z > -89 && z < -9.5 && y < LEVEL.roof - 1;
-    k.current += ((inside ? 1 : 0) - k.current) * Math.min(1, dt * 3);
+    k.current += ((indoor ? 1 : 0) - k.current) * Math.min(1, dt * 3);
     const t = k.current;
     lights.current.forEach((l, i) => {
-      if (l) l.intensity = pts[i][4] * (0.25 + 0.75 * t);
+      if (l) l.intensity = pts[i] ? pts[i][4] * (0.25 + 0.75 * t) : 0;
     });
     // Indoors the sky must not tint walls and floors blue: dim sky IBL + hemisphere.
     scene.environmentIntensity = 0.55 - 0.37 * t;
@@ -197,8 +236,8 @@ function Lighting() {
     <>
       <hemisphereLight ref={hemi} args={["#eaf3ff", "#a39a80", 0.55]} />
       <ambientLight intensity={0.1} color="#fff4e6" />
-      {pts.map(([x, y, z, d], i) => (
-        <pointLight key={i} ref={(l) => void (lights.current[i] = l)} position={[x, y, z]} intensity={0} distance={d} decay={1.3} color="#fff1dc" />
+      {Array.from({ length: LIGHT_POOL }, (_, i) => (
+        <pointLight key={i} ref={(l) => void (lights.current[i] = l)} intensity={0} decay={1.3} color="#fff1dc" />
       ))}
     </>
   );
@@ -212,6 +251,7 @@ function Ticker() {
     if (acc.current > 0.16) {
       acc.current = 0;
       tickProximity();
+      tickPassages();
     }
   });
   return null;

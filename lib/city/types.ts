@@ -17,6 +17,8 @@ export interface CityData {
   buildings: { h: number; s?: 1; n?: string; p: P2[] }[];
   water: { p: P2[]; n?: string }[];
   green: { p: P2[]; n?: string }[];
+  /** OSM land use of the spaces between footprints (landuse / leisure / tourism / amenity value) */
+  landuse?: { k: string; n?: string; p: P2[] }[];
   bridges: { p: P2[] }[];
   /** river / canal centrelines (may be absent in older data files) */
   waterways?: { k: string; n?: string; p: P2[] }[];

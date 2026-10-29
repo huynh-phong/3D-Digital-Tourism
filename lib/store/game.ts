@@ -26,7 +26,6 @@ export type GuideNotice = "waiting" | "narrationPaused" | "noRoute" | "shortcut"
 export type Panel =
   | { kind: "stop"; id: string }
   | { kind: "interactable"; id: string }
-  | { kind: "stairs"; id: "stair-roof" | "stair-basement"; dir: "up" | "down" }
   | { kind: "complete" }
   | null;
 
@@ -50,7 +49,10 @@ interface GameState {
   camMode: CamMode;
   floor: FloorId;
   room: RoomId | null;
-  nearby: { kind: "stop" | "interactable" | "stairs"; id: string } | null;
+  /** the interaction point (data/dinh/interactions) the visitor can act on now */
+  nearby: { id: string } | null;
+  /** portal transition in progress: fade overlay out / in (input is frozen) */
+  fade: "out" | "in" | null;
   currentStopId: string | null; // stop the player is standing at
   targetStopId: string | null; // stop Minh Anh is leading to
   panel: Panel;
@@ -85,6 +87,7 @@ export const useGame = create<GameState>()((set) => ({
   floor: "grounds",
   room: null,
   nearby: null,
+  fade: null,
   currentStopId: null,
   targetStopId: null,
   panel: null,

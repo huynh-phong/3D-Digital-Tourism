@@ -5,7 +5,8 @@ import { GROUNDS, PALACE, ROOMS, floorFromY } from "@/data/dinh/layout";
 import { INTERACTABLES, TOUR_STOPS } from "@/data/dinh/tour";
 import { loc, useLang, useT } from "@/lib/i18n";
 import { runtime, useGame, useProgress } from "@/lib/store/game";
-import { goToStop, navigateTo, STAIR_POINTS } from "@/lib/tour/director";
+import { goToStop, navigateTo } from "@/lib/tour/director";
+import { INTERACTIONS } from "@/data/dinh/interactions";
 import { DESTINATIONS, DEST_BY_KEY, destKey } from "@/lib/tour/destinations";
 import { navRuntime } from "@/lib/tour/navigator";
 import type { FloorId } from "@/types";
@@ -75,7 +76,7 @@ export function FloorMap() {
           label={t.tour.floorMap}
           value={floor}
           onChange={setFloor}
-          options={(["grounds", "f1", "basement", "roof"] as FloorId[]).map((f) => ({ value: f, label: t.tour.floors[f] }))}
+          options={(["grounds", "f1", "f2", "basement", "roof"] as FloorId[]).map((f) => ({ value: f, label: t.tour.floors[f] }))}
         />
         <p className="text-[11px] text-muted">{loc(ROOMS[0].note, lang)}</p>
       </div>
@@ -109,7 +110,7 @@ export function FloorMap() {
                 <text x={0} y={-35} fontSize={2.4} textAnchor="middle" fill="var(--text)">Tứ phương vô sự lầu</text>
               </>
             )}
-            {STAIR_POINTS.filter((s) => floorFromY(s.at[1]) === floor).map((s, i) => (
+            {INTERACTIONS.filter((s) => (s.kind === "stairs" || s.kind === "hint") && s.floor === floor).map((s, i) => (
               <text key={i} x={s.at[0]} y={s.at[2] - 3} fontSize={2.6} textAnchor="middle" fill="var(--text)">⇅</text>
             ))}
           </>

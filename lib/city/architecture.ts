@@ -272,12 +272,13 @@ export function addBuilding(B: Buckets, s: BuildingSpec): number {
 }
 
 /** Choose a kit for an OSM footprint from its size and (known or estimated) height. */
-export function classify(area: number, osmHeight: number, R: () => number, compact: boolean): { kind: Kind; floors: number; wall: THREE.Color } {
-  if (osmHeight > 60 || (osmHeight === 0 && area > 1500 && R() < 0.35)) {
+export function classify(area: number, osmHeight: number, R: () => number, compact: boolean, urban = 1): { kind: Kind; floors: number; wall: THREE.Color } {
+  // `urban` (0..1) = how central the site is; unknown-height towers only appear in the core
+  if (osmHeight > 60 || (osmHeight === 0 && area > 1500 && urban > 0.55 && R() < 0.35)) {
     const floors = osmHeight ? Math.round(osmHeight / TILE.glass.h) : 14 + Math.floor(R() * 22);
     return { kind: "tower", floors: Math.max(9, floors), wall: pick(PALETTE.glass, R) };
   }
-  if (osmHeight > 26 || (osmHeight === 0 && area > 900 && R() < 0.5)) {
+  if (osmHeight > 26 || (osmHeight === 0 && area > 900 && R() < 0.5 * urban)) {
     const floors = osmHeight ? Math.round(osmHeight / TILE.office.h) : 7 + Math.floor(R() * 8);
     return R() < 0.6
       ? { kind: "office", floors: Math.max(5, floors), wall: pick(PALETTE.office, R) }

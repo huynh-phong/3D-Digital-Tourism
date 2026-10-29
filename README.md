@@ -13,7 +13,7 @@ với hướng dẫn viên AI **Minh Anh** dẫn đường, thuyết minh song n
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=fff)](https://www.typescriptlang.org)
 [![Gemini](https://img.shields.io/badge/AI-Gemini%20Flash-8E75B2?logo=googlegemini&logoColor=fff)](https://ai.google.dev)
 [![Azure Speech](https://img.shields.io/badge/voice-Azure%20AI%20Speech-0078D4?logo=microsoftazure&logoColor=fff)](https://learn.microsoft.com/azure/ai-services/speech-service/)
-[![Tests](https://img.shields.io/badge/tests-60%20passing-2ea44f)](#-kiểm-thử)
+[![Tests](https://img.shields.io/badge/tests-92%20passing-2ea44f)](#-kiểm-thử)
 [![OSM](https://img.shields.io/badge/data-OpenStreetMap%20ODbL-7EBC6F?logo=openstreetmap&logoColor=fff)](https://www.openstreetmap.org/copyright)
 
 [Tính năng](#-tính-năng) · [Ảnh chụp](#-ảnh-chụp) · [Hướng dẫn viên AI](#-hướng-dẫn-viên-ai-minh-anh) · [Kiến trúc](#-kiến-trúc) · [Độ chính xác](#-độ-chính-xác-lịch-sử)
@@ -26,7 +26,8 @@ với hướng dẫn viên AI **Minh Anh** dẫn đường, thuyết minh song n
 
 **Sài Gòn 3D** là ứng dụng web du lịch số cho di sản TP. Hồ Chí Minh:
 
-- **Bản đồ thành phố 3D** khu trung tâm (Quận 1) dựng tự động từ OpenStreetMap: đường phố, sông Sài Gòn, kênh Bến Nghé, công viên và khoảng 2.400 công trình, cùng xe cộ, thuyền, người đi bộ và chim được mô phỏng.
+- **Bản đồ thành phố 3D** vùng đô thị trung tâm (Quận 1, Quận 3, bờ sông, Thủ Thiêm, Bình Thạnh tới Landmark 81) dựng tự động từ OpenStreetMap: đường phố, sông Sài Gòn, các kênh, công viên, khoảng 4.600 công trình có dữ liệu và nhà phố khái quát hóa lấp lõi khối phố, cùng xe cộ, thuyền, người đi bộ và chim được mô phỏng.
+- **10 địa điểm** trên bản đồ: Dinh Độc Lập, Nhà thờ Đức Bà, Bưu điện Trung tâm, Bảo tàng Chứng tích Chiến tranh, Chợ Bến Thành, Bến Nhà Rồng, Thảo Cầm Viên, Landmark 81, Bitexco và Cầu Ba Son.
 - **Dinh Độc Lập đi bộ được**: khuôn viên, mặt tiền với rèm hoa đá, đại sảnh, Phòng Trình Quốc thư, Phòng họp Nội các, tầng hầm và sân thượng, có va chạm vật lý.
 - **Minh Anh, hướng dẫn viên AI** là một nhân vật trong thế giới 3D: đi trước dẫn đường, dừng chờ khi bạn tụt lại, thuyết minh có phụ đề và giọng nữ tiếng Việt/Anh, và trả lời câu hỏi bằng Gemini dựa trên kho tư liệu có nguồn.
 
@@ -92,7 +93,7 @@ flowchart LR
 | <kbd>Shift</kbd> | Chạy (5,5 m/s) |
 | Chuột | Nhìn quanh — nhấp vào cảnh hoặc <kbd>L</kbd> để khóa chuột; không khóa thì giữ và kéo |
 | <kbd>Esc</kbd> | Đang khóa chuột: mở khóa (game vẫn chạy) · Con trỏ đã mở: tạm dừng / cài đặt |
-| <kbd>E</kbd> | Tương tác / đóng bảng thông tin |
+| <kbd>F</kbd> | Tương tác khi có gợi ý: vào/ra cửa chính, lối tắt cầu thang sân thượng, xem hiện vật, nghe thuyết minh; đóng bảng thông tin |
 | <kbd>V</kbd> | Góc nhìn thứ nhất ↔ thứ ba |
 | <kbd>Space</kbd> | Nhảy |
 | <kbd>M</kbd> | Sơ đồ tầng & chọn điểm đến |
@@ -129,6 +130,7 @@ tests/               vitest
 
 **Nguyên tắc thiết kế**
 
+- **Dinh chia thành 14 không gian độc lập.** Tầng 1 theo mô tả của trang chính thức: Đại sảnh và cầu thang trung tâm, Phòng họp Nội các (bên phải), Phòng Đại yến (bên trái), Phòng Khánh tiết (sau cầu thang); tầng 2: sảnh và Phòng Trình Quốc thư; tầng hầm: phòng bản đồ tác chiến, phòng truyền tin; cùng khuôn viên, cầu thang phụ và sân thượng (`data/dinh/spaces.ts`). Nội thất từng phòng dựng theo bộ ảnh tham chiếu tuyển chọn (danh sách ảnh trong `REFERENCE_PHOTOS`). Mỗi không gian chỉ mang hình học, va chạm, nội thất, đèn và đồ thị đi bộ của riêng nó (`lib/dinh/spaceModel.ts`) và chỉ được dựng khi người chơi ở trong đó; đi qua cửa bằng phím F sẽ tải không gian đích sau màn mờ, rồi giải phóng hoặc giữ trong bộ nhớ đệm (tối đa 1) không gian vừa rời (`lib/world/streaming.ts`).
 - **Một nguồn dữ liệu cho hình, va chạm và đường đi.** `lib/dinh/palaceModel.ts` sinh khối hiển thị, collider Rapier, đồ thị đi bộ và vật cản (kể cả nội thất) từ `data/dinh/layout.ts`. Người chơi, Minh Anh và bộ tìm đường vì vậy nhìn thấy cùng một thế giới.
 - **Kiến thức nằm trong dữ liệu.** Mỗi câu thuyết minh dựa trên một `Fact` có nguồn và mức tin cậy (`verified` / `estimated` / `simulated` / `conflicting`).
 - **AI bị ràng buộc vào kho tư liệu.** Mô hình chỉ được trả lời từ phần tư liệu truy xuất kèm theo; dữ kiện mâu thuẫn được nêu rõ là mâu thuẫn.
@@ -150,7 +152,7 @@ Next.js 16 giữ trang đã xem trong React `<Activity>`. Khi trang bị ẩn, R
 
 ## 🧪 Kiểm thử
 
-Dự án có 60 kiểm thử tự động (Vitest), gồm:
+Dự án có 92 kiểm thử tự động (Vitest), gồm:
 
 - **Kho tri thức:** toàn vẹn dữ liệu, nguồn, i18n, truy xuất câu trả lời.
 - **Vật lý:** một capsule dùng character controller Rapier đi từ cổng lên sân thượng, xuống tầng hầm, tới các hiện vật theo tuyến đã lập; tường chặn được.

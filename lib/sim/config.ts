@@ -6,9 +6,10 @@ export const SIM_DENSITY: Record<Quality, {
   walkers: number; strollers: number; groups: number; pets: number;
   flocks: number; pigeons: number; egrets: number;
 }> = {
-  low: { vehicles: 220, boats: 6, walkers: 120, strollers: 50, groups: 8, pets: 0, flocks: 2, pigeons: 0, egrets: 0 },
-  medium: { vehicles: 520, boats: 12, walkers: 320, strollers: 140, groups: 22, pets: 10, flocks: 4, pigeons: 40, egrets: 8 },
-  high: { vehicles: 900, boats: 18, walkers: 600, strollers: 260, groups: 40, pets: 20, flocks: 6, pigeons: 90, egrets: 14 },
+  // the detailed city is ~2.5x larger since the Bình Thạnh / Thảo Cầm Viên extension
+  low: { vehicles: 360, boats: 8, walkers: 200, strollers: 80, groups: 12, pets: 0, flocks: 3, pigeons: 0, egrets: 0 },
+  medium: { vehicles: 900, boats: 18, walkers: 560, strollers: 240, groups: 36, pets: 16, flocks: 6, pigeons: 70, egrets: 12 },
+  high: { vehicles: 1500, boats: 26, walkers: 1000, strollers: 420, groups: 64, pets: 30, flocks: 9, pigeons: 150, egrets: 22 },
 };
 
 /** SimulationLOD: camera distances (m) beyond which a layer is hidden and not updated. */

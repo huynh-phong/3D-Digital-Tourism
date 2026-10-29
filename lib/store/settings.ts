@@ -29,7 +29,7 @@ export const DEFAULT_KEYS: Record<Action, string> = {
   left: "KeyA",
   right: "KeyD",
   run: "ShiftLeft",
-  interact: "KeyE",
+  interact: "KeyF",
   camera: "KeyV",
   jump: "Space",
   map: "KeyM",
@@ -114,7 +114,10 @@ export const useSettings = create<SettingsState>()(
         const p = (persisted ?? {}) as Partial<SettingsState>;
         // the browser-voice mode no longer exists: Minh Anh always speaks with the Azure voice
         const voiceMode: VoiceMode = (p.voiceMode as string) === "none" ? "none" : "cloud";
-        return { ...current, ...p, voiceMode, keys: { ...DEFAULT_KEYS, ...(p.keys ?? {}) } };
+        const keys = { ...DEFAULT_KEYS, ...(p.keys ?? {}) };
+        // the interact key moved from E to F: carry old saves over unless F is taken
+        if (keys.interact === "KeyE" && !Object.values(keys).includes("KeyF")) keys.interact = "KeyF";
+        return { ...current, ...p, voiceMode, keys };
       },
       // Persist data only, not the action functions.
       partialize: (s) => Object.fromEntries(Object.entries(s).filter(([, v]) => typeof v !== "function")) as Partial<SettingsState>,

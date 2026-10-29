@@ -15,7 +15,7 @@ import { guideSignals } from "@/lib/guide/signals";
 import { pointAt, project, type Route, type RoutePlanner } from "@/lib/dinh/route";
 import { runtime, useGame, type GuideNotice } from "@/lib/store/game";
 import { useSettings } from "@/lib/store/settings";
-import { currentDestination } from "@/lib/tour/navigator";
+import { currentDestination, navTarget } from "@/lib/tour/navigator";
 import { arriveAt, isNarrated } from "@/lib/tour/director";
 import type { Vec3 } from "@/types";
 import { Humanoid, MINH_ANH, newAnim } from "@/components/player/Humanoid";
@@ -72,9 +72,11 @@ export function GuideNPC({ planner, spawn }: { planner: RoutePlanner; spawn: Vec
 
     // ---- what is she doing?
     const dest = currentDestination();
-    const leading = g.guideLeading && !!dest;
+    // in another space, she leads to the door that starts the way there
+    const target = navTarget(dest);
+    const leading = g.guideLeading && !!dest && !!target;
     const intent = leading ? "lead" : g.mode === "free" || !dest ? "follow" : "idle";
-    const spotRaw: Vec3 | null = leading ? dest!.guideSpot : null;
+    const spotRaw: Vec3 | null = leading ? target!.guideSpot : null;
 
     // ---- her route (lead: to her spot; follow: to a point near the visitor)
     let goal: Vec3 | null = null;
@@ -87,7 +89,7 @@ export function GuideNPC({ planner, spawn }: { planner: RoutePlanner; spawn: Vec
       } else guideSignals.call = false;
     }
     const n = nav.current;
-    const goalKey = goal ? (leading ? `lead:${dest!.key}` : "follow") : "";
+    const goalKey = goal ? (leading ? `lead:${dest!.key}:${target!.door?.id ?? ""}` : "follow") : "";
     const keyChanged = goalKey !== n.key;
     const stale =
       goal &&
@@ -118,8 +120,8 @@ export function GuideNPC({ planner, spawn }: { planner: RoutePlanner; spawn: Vec
     } else if (leading && route && !sameFloor) gap = 99;
     const atSpot = leading && !!route && route.length - n.s < 0.3;
     const stop = dest?.kind === "stop" ? STOP_BY_ID.get(dest.id) : undefined;
-    const explainDue = g.mode === "guided" && !!stop && !isNarrated(stop.id);
-    const playerToSpot = dest && floorFromY(P[1]) === floorFromY(dest.point[1]) ? Math.hypot(P[0] - dest.point[0], P[2] - dest.point[2]) : Infinity;
+    const explainDue = g.mode === "guided" && !!stop && !isNarrated(stop.id) && !target?.door;
+    const playerToSpot = target && floorFromY(P[1]) === floorFromY(target.point[1]) ? Math.hypot(P[0] - target.point[0], P[2] - target.point[2]) : Infinity;
     const out = brain.current.update(dt, {
       intent,
       dist,
@@ -164,6 +166,8 @@ export function GuideNPC({ planner, spawn }: { planner: RoutePlanner; spawn: Vec
       let speed = 0;
       if (leading) speed = out.state === "LEADING" || out.state === "CHECKING_DISTANCE" || out.state === "RESUMING" ? out.speed : 0;
       else if (intent === "follow" && out.state === "FOLLOWING") speed = dist > 9 || guideSignals.call ? GUIDE.hurry : dist > GUIDE.followDist + 0.4 ? GUIDE.walk : 0;
+      // routes stay inside the active space (doors are solid): she waits at a
+      // door and the visitor's F transition brings her through
       n.s = Math.min(route.length, n.s + speed * dt);
       const p = pointAt(route, n.s);
       G.set(p[0], p[1], p[2]);
