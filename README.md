@@ -4,8 +4,8 @@
 
 **Saigon 3D — Immersive Heritage Explorer**
 
-Bản đồ Sài Gòn 3D dựng từ dữ liệu OpenStreetMap thật, và chuyến tham quan **Dinh Độc Lập** có thể đi bộ,
-với hướng dẫn viên AI **Minh Anh** dẫn đường, thuyết minh song ngữ và trả lời câu hỏi dựa trên tư liệu đã kiểm chứng.
+Bản đồ Sài Gòn 3D dựng từ dữ liệu OpenStreetMap thật, cùng chuyến tham quan **Dinh Độc Lập** đi bộ được trong không gian 3D.
+Hướng dẫn viên AI **Minh Anh** dẫn đường, thuyết minh song ngữ và trả lời câu hỏi dựa trên tư liệu đã kiểm chứng.
 
 [![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs)](https://nextjs.org)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=000)](https://react.dev)
@@ -16,7 +16,7 @@ với hướng dẫn viên AI **Minh Anh** dẫn đường, thuyết minh song n
 [![Tests](https://img.shields.io/badge/tests-92%20passing-2ea44f)](#-kiểm-thử)
 [![OSM](https://img.shields.io/badge/data-OpenStreetMap%20ODbL-7EBC6F?logo=openstreetmap&logoColor=fff)](https://www.openstreetmap.org/copyright)
 
-[Tính năng](#-tính-năng) · [Ảnh chụp](#-ảnh-chụp) · [Hướng dẫn viên AI](#-hướng-dẫn-viên-ai-minh-anh) · [Kiến trúc](#-kiến-trúc) · [Độ chính xác](#-độ-chính-xác-lịch-sử)
+[Giới thiệu](#-giới-thiệu) · [Bắt đầu](#-bắt-đầu) · [Dinh Độc Lập](#️-dinh-độc-lập-3d) · [Minh Anh](#-hướng-dẫn-viên-ai-minh-anh) · [Kiến trúc mã](#-kiến-trúc-mã) · [Độ chính xác](#-độ-chính-xác-lịch-sử)
 
 </div>
 
@@ -24,50 +24,120 @@ với hướng dẫn viên AI **Minh Anh** dẫn đường, thuyết minh song n
 
 ## 📖 Giới thiệu
 
-**Sài Gòn 3D** là ứng dụng web du lịch số cho di sản TP. Hồ Chí Minh:
+**Sài Gòn 3D** là ứng dụng web du lịch số cho di sản TP. Hồ Chí Minh, gồm hai phần:
 
-- **Bản đồ thành phố 3D** vùng đô thị trung tâm (Quận 1, Quận 3, bờ sông, Thủ Thiêm, Bình Thạnh tới Landmark 81) dựng tự động từ OpenStreetMap: đường phố, sông Sài Gòn, các kênh, công viên, khoảng 4.600 công trình có dữ liệu và nhà phố khái quát hóa lấp lõi khối phố, cùng xe cộ, thuyền, người đi bộ và chim được mô phỏng.
+- **Bản đồ thành phố 3D.**
+  - Dựng tự động từ OpenStreetMap vùng trung tâm: Quận 1, Quận 3, bờ sông Sài Gòn, Thủ Thiêm, Bình Thạnh tới Landmark 81.
+  - Có đường phố, sông và kênh, công viên, khoảng 4.600 công trình có dữ liệu.
+  - Ngoài khung đô thị, đường và sông thật vẫn tiếp tục, còn nhà cửa thưa dần ra vùng đất trống.
+  - Xe cộ, thuyền, người đi bộ và chim được mô phỏng.
 - **10 địa điểm** trên bản đồ: Dinh Độc Lập, Nhà thờ Đức Bà, Bưu điện Trung tâm, Bảo tàng Chứng tích Chiến tranh, Chợ Bến Thành, Bến Nhà Rồng, Thảo Cầm Viên, Landmark 81, Bitexco và Cầu Ba Son.
-- **Dinh Độc Lập đi bộ được**: khuôn viên, mặt tiền với rèm hoa đá, đại sảnh, Phòng Trình Quốc thư, Phòng họp Nội các, tầng hầm và sân thượng, có va chạm vật lý.
-- **Minh Anh, hướng dẫn viên AI** là một nhân vật trong thế giới 3D: đi trước dẫn đường, dừng chờ khi bạn tụt lại, thuyết minh có phụ đề và giọng nữ tiếng Việt/Anh, và trả lời câu hỏi bằng Gemini dựa trên kho tư liệu có nguồn.
+- **Dinh Độc Lập đi bộ được.** Gồm khuôn viên, mặt tiền, 20 không gian bên trong ở tầng 1, tầng 2, tầng hầm và sân thượng, dựng theo 90 ảnh tham chiếu đã tuyển chọn và tư liệu của trang chính thức.
 
-> **Trạng thái:** MVP. Dinh Độc Lập là điểm được đầu tư hoàn chỉnh; các địa danh khác trên bản đồ ở trạng thái “Sắp ra mắt”.
-
-## ✨ Tính năng
-
-| | |
-|---|---|
-| 🗺️ **Bản đồ 3D từ dữ liệu thật** | Hình học đường, sông, công viên, công trình từ OSM; kiến trúc sinh tự động theo diện tích/chiều cao; dựng trong Web Worker |
-| 🚦 **Thành phố sống động** | 8 loại xe chạy theo chiều `oneway` thật, dừng đèn đỏ ở giao lộ; tàu thuyền trên sông và kênh; người đi bộ, chó, mèo, chim; 3 mức chất lượng và LOD |
-| 🏛️ **Dinh Độc Lập chi tiết** | Texture PBR sinh bằng mã, rèm hoa đá dựng bằng hình học thật, nội thất các phòng theo ảnh chính thức, ánh sáng dịu dần khi vào/ra nhà |
-| 🚶 **Điều khiển kiểu game** | WASD, chạy, nhảy, góc nhìn thứ nhất/thứ ba; khóa chuột (Pointer Lock); dáng đi khớp vận tốc, chân không trượt; hỗ trợ cảm ứng |
-| 🧭 **Dẫn đường** | Chọn điểm đến (điểm dừng, hiện vật, phòng) → dải sáng bám sàn đi qua cửa và cầu thang hợp lệ, không xuyên tường; khoảng cách và chỉ dẫn rẽ trái/phải/lên/xuống |
-| 👩‍🏫 **Minh Anh dẫn đoàn** | Đi trước 2–4 m, chậm lại và chờ khi bạn tụt lại, nhắc bằng lời (không lặp liên tục), thuyết minh khi bạn đến gần, tạm dừng khi bạn đi xa |
-| 🤖 **Hỏi đáp AI** | Gemini Flash trả lời **chỉ từ kho tư liệu có nguồn**, đúng ngôn ngữ bạn đang gõ, nhớ ngữ cảnh nhiều lượt; thiếu khóa hoặc lỗi thì trả lời trích từ kho (ghi rõ chế độ demo/dự phòng) |
-| 🔊 **Giọng bản xứ** | Minh Anh đọc tiếng Việt bằng giọng nữ **HoaiMy** và tiếng Anh bằng giọng nữ **Jenny** (Azure AI Speech, phát âm chuẩn), cố định theo ngôn ngữ; stream theo từng câu, lỗi thì thử lại rồi chỉ hiện phụ đề |
-| 🌐 **Song ngữ & tiếp cận** | Tiếng Việt / English, giao diện sáng/tối, đổi phím, giảm chuyển động, phụ đề |
+> **Trạng thái:** Dinh Độc Lập là điểm được đầu tư hoàn chỉnh. Các địa danh khác trên bản đồ đang ở trạng thái “Sắp ra mắt”.
 
 ## 📸 Ảnh chụp
 
-| Mặt tiền và rèm hoa đá | Minh Anh thuyết minh ở cổng |
+| Mặt tiền Dinh Độc Lập | Rèm hoa đá và bao lơn danh dự |
 |---|---|
-| ![Mặt tiền Dinh Độc Lập](docs/screenshots/palace-facade.png) | ![Minh Anh thuyết minh](docs/screenshots/guide-explaining.jpg) |
-| **Dải dẫn đường trên đường vòng** | **Phòng Trình Quốc thư** |
-| ![Dẫn đường](docs/screenshots/route-guidance.jpg) | ![Phòng Trình Quốc thư](docs/screenshots/credentials-room.jpg) |
-| **Phòng họp Hội đồng Nội các** | |
-| ![Phòng họp Nội các](docs/screenshots/cabinet-room.jpg) | |
+| ![Mặt tiền](docs/screenshots/palace-front.jpg) | ![Rèm hoa đá](docs/screenshots/stone-curtain.jpg) |
+| **Cầu thang trung tâm chia hai vế** | **Sân trong (giếng trời)** |
+| ![Cầu thang trung tâm](docs/screenshots/central-staircase.jpg) | ![Giếng trời](docs/screenshots/courtyard.jpg) |
+| **Phòng Tiếp khách Tổng thống** | **Phòng họp Hội đồng Nội các** |
+| ![Phòng Tiếp khách Tổng thống](docs/screenshots/president-reception.jpg) | ![Phòng Nội các](docs/screenshots/cabinet-room.jpg) |
+| **Cổng chính và hàng rào** | **Minh Anh thuyết minh** |
+| ![Cổng chính](docs/screenshots/main-gate.jpg) | ![Minh Anh](docs/screenshots/guide-explaining.jpg) |
 
-<sub>Ảnh chụp từ ứng dụng (chế độ chất lượng thấp/trung bình, trình duyệt headless).</sub>
+<sub>Ảnh chụp từ ứng dụng trong trình duyệt headless. Một số ảnh đã ẩn giao diện.</sub>
+
+## 🚀 Bắt đầu
+
+**Yêu cầu:** Node.js 20 trở lên và npm.
+
+```bash
+git clone https://github.com/huynh-phong/3D-Digital-Tourism.git
+```
+
+```bash
+cd 3D-Digital-Tourism && npm install
+```
+
+```bash
+npm run dev
+```
+
+Mở `http://localhost:3000`: trang chủ là bản đồ, còn `/dinh-doc-lap` là chuyến tham quan.
+
+### Biến môi trường (tùy chọn)
+
+Không có khóa API, ứng dụng vẫn chạy: Minh Anh trả lời bằng trích dẫn từ kho tư liệu và chỉ hiện phụ đề. Để bật AI và giọng nói, sao chép `.env.example` thành `.env.local` rồi điền:
+
+| Biến | Dùng cho |
+|---|---|
+| `AI_PROVIDER`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_FALLBACK_MODELS` | Hỏi đáp bằng Google Gemini (có model dự phòng) |
+| `ANTHROPIC_API_KEY`, `AI_MODEL` | Nhà cung cấp AI thay thế |
+| `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION`, `AZURE_VOICE_VI`, `AZURE_VOICE_EN` | Giọng đọc Azure AI Speech |
+
+Khóa chỉ được dùng phía server, không bao giờ gửi xuống trình duyệt. **Không commit file `.env`.** Khi triển khai lên Vercel, thêm các biến này trong *Project → Settings → Environment Variables*.
+
+### Lệnh
+
+| Lệnh | Tác dụng |
+|---|---|
+| `npm run dev` | Chạy máy chủ phát triển |
+| `npm run build` / `npm start` | Build và chạy bản production |
+| `npm test` | Chạy 92 kiểm thử (Vitest) |
+| `npm run lint` · `npm run typecheck` | ESLint · kiểm tra kiểu TypeScript |
+| `npm run data:osm` | Tải lại dữ liệu OSM vùng trung tâm vào `public/data/city.json` |
+| `node scripts/fetch-outskirts.mjs` | Tải lại đường và sông vùng ngoại vi vào `public/data/outskirts.json` |
+
+## 🏛️ Dinh Độc Lập 3D
+
+### Các không gian
+
+Dinh được chia thành **20 không gian độc lập**, khai báo trong `data/dinh/spaces.ts`. Mỗi không gian chỉ được dựng khi người chơi ở trong đó (hoặc vừa rời đi) và được giải phóng khi không còn cần.
+
+| Tầng | Không gian |
+|---|---|
+| Khuôn viên | Cổng và hàng rào, thảm cỏ oval với đài phun nước, hồ sen bán nguyệt, mặt tiền với rèm hoa đá |
+| Tầng 1 | Đại sảnh, cầu thang trung tâm, Phòng họp Nội các (bên phải sảnh), Phòng Đại yến (bên trái), Phòng Khánh tiết (sau cầu thang), hành lang cầu thang, sân trong (giếng trời) |
+| Tầng 2 | Sảnh tầng 2, Phòng Trình Quốc thư, Phòng Tiếp khách Tổng thống, ba phòng tiếp khách và một phòng làm việc (tên chưa xác minh) |
+| Tầng hầm | Hành lang, phòng bản đồ tác chiến, phòng truyền tin |
+| Sân thượng | Lầu Tứ phương vô sự, sân đáp với trực thăng UH-1 và hai vòng đỏ đánh dấu chỗ bom rơi |
+
+Vị trí tương đối các phòng tầng 1 theo mô tả của trang chính thức. Kích thước và vị trí cụ thể là ước lượng, vì không có mặt bằng đo đạc công khai.
+
+### Di chuyển giữa các không gian
+
+- **Cửa:** nhấn <kbd>F</kbd> khi có gợi ý. Không gian đích được tải sau màn mờ, rồi người chơi xuất hiện ở phía bên kia cửa.
+- **Cầu thang trung tâm:** đi bộ thật. Đi vế giữa lên chiếu nghỉ, rẽ trái hoặc phải theo một vế bên lên tầng 2. Cảnh tự chuyển giữa đại sảnh và sảnh tầng 2 tại chỗ, không teleport.
+- **Cầu thang lên sân thượng và xuống tầng hầm:** đi bộ trong giếng thang. Riêng cầu thang sân thượng có lối tắt bằng F, vì ba tầng lầu nó đi qua chưa được mô hình hóa.
+
+### Cách dựng hình
+
+- **Mặt tiền:** đo trên ảnh chụp chính diện, gồm 23 nhịp. Rèm hoa đá được dựng bằng hình học thật (3 hàng đốt trúc). Đầu hồi có phù điêu, bệ ốp đá chẻ.
+- **Phòng:** dựng theo nhóm ảnh tham chiếu của chính phòng đó. Danh sách ảnh ghi trong `REFERENCE_PHOTOS`.
+- **Texture:** 39 bộ PBR (màu, độ nhám, normal map) sinh bằng mã, ở độ phân giải 1024 px khi chọn chất lượng cao. Thảm, cánh tủ sơn mài và tranh được vẽ trên canvas 2048 px, không lặp hoa văn.
+- **Ảnh tham chiếu:** không ảnh nào được dán lên bề mặt. Tranh và họa tiết là hình minh họa đúng chất liệu và kích thước, không sao chép tác phẩm.
+
+Chi tiết từng khu vực, mức xác minh và số liệu đo nằm trong [báo cáo nghiệm thu](docs/BAO_CAO_NGHIEM_THU_DINH_DOC_LAP.md).
 
 ## 🤖 Hướng dẫn viên AI Minh Anh
 
-Minh Anh vừa là nhân vật trong thế giới 3D, vừa là trợ lý hỏi đáp:
+Minh Anh vừa là nhân vật trong thế giới 3D, vừa là trợ lý hỏi đáp.
 
-- **Trả lời bằng Google Gemini (Flash)**, chỉ dựa trên kho tư liệu đã kiểm chứng của dự án; câu hỏi nằm ngoài kho được trả lời thẳng thắn là chưa có tư liệu. Khi AI quá tải, hệ thống chuyển sang model dự phòng hoặc trích nguyên văn từ kho và ghi rõ điều đó.
-- **Giọng nói bản xứ từ Azure AI Speech**: tiếng Việt bằng giọng nữ HoaiMy, tiếng Anh bằng giọng nữ Jenny, cố định theo ngôn ngữ.
-- **Dẫn đoàn thật sự**: đi trước người chơi, chờ khi bị bỏ lại, nhắc nhở có chừng mực, thuyết minh khi người chơi đến gần và tạm dừng khi họ đi xa.
-
-**Luồng hội thoại**
+- **Dẫn đoàn:**
+  - đi trước người chơi 2–4 m, đi qua cửa và cầu thang hợp lệ;
+  - chậm lại và chờ khi bạn tụt lại, nhắc có chừng mực;
+  - thuyết minh khi bạn đến gần, tạm dừng khi bạn đi xa.
+- **Trả lời bằng Google Gemini (Flash):**
+  - chỉ dựa trên kho tư liệu có nguồn của dự án, đúng ngôn ngữ bạn đang gõ, nhớ ngữ cảnh nhiều lượt;
+  - câu hỏi ngoài kho tư liệu được trả lời thẳng là chưa có thông tin đã xác minh;
+  - khi AI quá tải, hệ thống chuyển sang model dự phòng hoặc trích nguyên văn từ kho, và ghi rõ chế độ đang dùng.
+- **Giọng đọc Azure AI Speech:**
+  - tiếng Việt giọng nữ HoaiMy, tiếng Anh giọng nữ Jenny;
+  - phát theo từng câu, có phụ đề;
+  - lỗi thì thử lại, sau đó chỉ hiện phụ đề.
 
 ```mermaid
 flowchart LR
@@ -75,126 +145,130 @@ flowchart LR
   A --> G[Gemini Flash<br/>+ model dự phòng]
   G --> T[Chữ hiện ngay<br/>trong thẻ Minh Anh]
   T --> N["narrator: tách câu<br/>GET /api/tts"]
-  N --> E["Azure AI Speech stream<br/>(vi: HoaiMy, en: Jenny)"]
-  E --> P[Phát từng câu,<br/>câu sau tạo song song]
-  E -. lỗi sau khi thử lại .-> F[Chỉ phụ đề cho câu đó]
+  N --> E["Azure AI Speech<br/>(vi: HoaiMy, en: Jenny)"]
+  E --> P[Phát từng câu]
+  E -. lỗi sau khi thử lại .-> F[Chỉ phụ đề]
 ```
 
-- Minh Anh trả lời bằng **ngôn ngữ bạn đang gõ** và chọn giọng tương ứng.
-- Câu hỏi mới dừng ngay âm thanh cũ, không bao giờ phát chồng.
-- Không lưu hội thoại hay file âm thanh; server chỉ giữ vài câu trong bộ nhớ đệm.
-- Khóa API chỉ nằm phía server; `/api/ask` và `/api/tts` có giới hạn tần suất và kiểm tra dữ liệu đầu vào (zod).
+**Bảo mật và quyền riêng tư:**
+- Không lưu hội thoại hay file âm thanh.
+- `/api/ask` và `/api/tts` có giới hạn tần suất và kiểm tra dữ liệu đầu vào (zod).
 
 ## 🎮 Điều khiển
 
 | Phím | Chức năng |
 |---|---|
-| <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> / mũi tên | Di chuyển (đi 3 m/s) |
+| <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> / mũi tên | Di chuyển (3 m/s) |
 | <kbd>Shift</kbd> | Chạy (5,5 m/s) |
-| Chuột | Nhìn quanh — nhấp vào cảnh hoặc <kbd>L</kbd> để khóa chuột; không khóa thì giữ và kéo |
-| <kbd>Esc</kbd> | Đang khóa chuột: mở khóa (game vẫn chạy) · Con trỏ đã mở: tạm dừng / cài đặt |
-| <kbd>F</kbd> | Tương tác khi có gợi ý: vào/ra cửa chính, lối tắt cầu thang sân thượng, xem hiện vật, nghe thuyết minh; đóng bảng thông tin |
+| Chuột | Nhìn quanh: nhấp vào cảnh hoặc <kbd>L</kbd> để khóa chuột; không khóa thì giữ chuột và kéo |
+| <kbd>F</kbd> | Tương tác khi có gợi ý: đi qua cửa, xem hiện vật, nghe thuyết minh, đóng bảng thông tin |
 | <kbd>V</kbd> | Góc nhìn thứ nhất ↔ thứ ba |
 | <kbd>Space</kbd> | Nhảy |
-| <kbd>M</kbd> | Sơ đồ tầng & chọn điểm đến |
+| <kbd>M</kbd> | Sơ đồ tầng và chọn điểm đến |
 | <kbd>G</kbd> | Gọi Minh Anh lại gần |
 | <kbd>Enter</kbd> | Hỏi Minh Anh |
 | <kbd>H</kbd> | Ẩn/hiện hướng dẫn |
+| <kbd>Esc</kbd> | Mở khóa chuột; nhấn lần nữa để tạm dừng và vào cài đặt |
 
-Mọi phím (trừ Esc) đổi được trong Cài đặt. Thiết bị cảm ứng có cần điều khiển ảo.
+Mọi phím (trừ Esc) đổi được trong phần Cài đặt. Thiết bị cảm ứng có cần điều khiển ảo.
 
-## 🧱 Kiến trúc
+## 🧱 Kiến trúc mã
 
-**Công nghệ:** Next.js 16 (App Router) · React 19 · Three.js + React Three Fiber + drei · Rapier (vật lý, character controller) · Zustand · Framer Motion · Tailwind CSS 4 · zod · Vitest · Azure AI Speech.
+**Công nghệ:** Next.js 16 (App Router) · React 19 · Three.js + React Three Fiber + drei · Rapier (vật lý) · Zustand · Framer Motion · Tailwind CSS 4 · zod · Vitest.
 
 ```
-app/                 Trang: / (bản đồ), /dinh-doc-lap (tham quan), /sources · API: /api/ask, /api/tts, /api/status
+app/                   / (bản đồ), /dinh-doc-lap (tham quan), /sources · API: /api/ask, /api/tts, /api/status
 components/
-  map/               CityScene, CityLayers (nhà, mặt đất, cây, mặt trời), LivingCity (xe, thuyền, người, chim)
-  game/              DinhScene (Canvas + Rapier), Palace (render + vật liệu), RouteGuide (dải dẫn đường, marker), DinhExperience (HUD)
-  player/            Player (character controller, camera), Humanoid (nhân vật & hoạt ảnh bằng mã)
-  guide/             GuideNPC (Minh Anh trong thế giới 3D), GuideCard (hội thoại, phụ đề)
-  tour/              StopList, InfoPanel, FloorMap, NavHud, Overlays
-data/                dinh/ (sources, knowledge, tour, layout) · landmarks · i18n (vi/en) · assets (giấy phép)
+  map/                 CityScene, các lớp thành phố, OutskirtsLayer, LivingCity (xe, thuyền, người, chim)
+  game/                DinhScene (Canvas + Rapier), Palace (không gian, vật liệu, các phòng tầng 1 và tầng hầm),
+                       PalaceExterior (mặt tiền, đài phun nước, mái), PalaceRoomsF2 (phòng tầng 2, giếng trời), RouteGuide
+  player/ guide/ tour/ Nhân vật, Minh Anh, giao diện tham quan
+data/dinh/             layout, rooms2 (kích thước, nội thất), spaces (không gian, cửa, ảnh tham chiếu),
+                       interactions (cửa F, lối đi bộ), tour, knowledge, sources
 lib/
-  city/              buildCity (worker), roads, architecture, textures, geom
-  sim/               traffic, water, life, models, config (LOD)
-  dinh/              palaceModel (hình + collider + đồ thị đi bộ từ một nguồn), route (tìm đường), textures (PBR thủ tục)
-  guide/brain.ts     Máy trạng thái của Minh Anh
-  tour/              director, navigator, destinations
-  server/            ai.ts (Gemini / Claude), tts.ts (Azure: HoaiMy / Jenny), rateLimit
-  audio/narrator.ts  Phát theo câu, phụ đề đồng bộ, tự hạ cấp giọng đọc
-scripts/fetch-osm.mjs  Tải & tiền xử lý OSM
-tests/               vitest
+  dinh/                palaceModel (hình + va chạm + đồ thị đi bộ từ một nguồn), spaceModel (tách theo không gian),
+                       route (tìm đường), textures (PBR sinh bằng mã)
+  world/streaming.ts   Tải, kích hoạt, cache và giải phóng không gian
+  interaction/         Chọn điểm tương tác, chạy chuyển cảnh qua cửa
+  tour/                director (thuyết minh, cửa, chuyển cảnh khi đi bộ), navigator (dẫn đường giữa các không gian)
+  city/ sim/           Dựng thành phố trong Web Worker, mô phỏng giao thông và sự sống
+  server/ audio/       Gemini/Claude, Azure TTS, giới hạn tần suất · phát theo câu và phụ đề
+scripts/               fetch-osm.mjs, fetch-outskirts.mjs
+tests/                 Vitest
+docs/                  Báo cáo nghiệm thu, ảnh chụp
 ```
 
-**Nguyên tắc thiết kế**
+**Nguyên tắc thiết kế:**
 
-- **Dinh chia thành 14 không gian độc lập.** Tầng 1 theo mô tả của trang chính thức: Đại sảnh và cầu thang trung tâm, Phòng họp Nội các (bên phải), Phòng Đại yến (bên trái), Phòng Khánh tiết (sau cầu thang); tầng 2: sảnh và Phòng Trình Quốc thư; tầng hầm: phòng bản đồ tác chiến, phòng truyền tin; cùng khuôn viên, cầu thang phụ và sân thượng (`data/dinh/spaces.ts`). Nội thất từng phòng dựng theo bộ ảnh tham chiếu tuyển chọn (danh sách ảnh trong `REFERENCE_PHOTOS`). Mỗi không gian chỉ mang hình học, va chạm, nội thất, đèn và đồ thị đi bộ của riêng nó (`lib/dinh/spaceModel.ts`) và chỉ được dựng khi người chơi ở trong đó; đi qua cửa bằng phím F sẽ tải không gian đích sau màn mờ, rồi giải phóng hoặc giữ trong bộ nhớ đệm (tối đa 1) không gian vừa rời (`lib/world/streaming.ts`).
-- **Một nguồn dữ liệu cho hình, va chạm và đường đi.** `lib/dinh/palaceModel.ts` sinh khối hiển thị, collider Rapier, đồ thị đi bộ và vật cản (kể cả nội thất) từ `data/dinh/layout.ts`. Người chơi, Minh Anh và bộ tìm đường vì vậy nhìn thấy cùng một thế giới.
+- **Một nguồn cho hình, va chạm và đường đi.** `palaceModel` sinh khối hiển thị, collider, đồ thị đi bộ và vật cản (kể cả nội thất) từ dữ liệu bố cục. Người chơi, Minh Anh và bộ tìm đường vì vậy cùng thấy một thế giới.
+- **Mỗi không gian độc lập.** Một không gian chỉ mang hình học, va chạm, nội thất, đèn và đồ thị đi bộ của chính nó. Cầu thang trung tâm thuộc chung hai không gian (`sharedRegions`), để đi bộ qua lại liền mạch.
 - **Kiến thức nằm trong dữ liệu.** Mỗi câu thuyết minh dựa trên một `Fact` có nguồn và mức tin cậy (`verified` / `estimated` / `simulated` / `conflicting`).
-- **AI bị ràng buộc vào kho tư liệu.** Mô hình chỉ được trả lời từ phần tư liệu truy xuất kèm theo; dữ kiện mâu thuẫn được nêu rõ là mâu thuẫn.
-- **Hành vi tách khỏi hiển thị.** Tìm đường (`route.ts`) và quyết định của Minh Anh (`brain.ts`) là mã thuần, được kiểm thử độc lập.
+- **Tách hành vi khỏi hiển thị.** Tìm đường và trạng thái của Minh Anh là mã thuần, được kiểm thử độc lập.
 
-<details>
-<summary><b>Minh Anh — máy trạng thái</b></summary>
+## ⚡ Hiệu năng
 
-`WAITING` → `LEADING` → (bạn tụt lại hơn ~6 m) `CHECKING_DISTANCE` → `WAITING_FOR_PLAYER` → (hơn ~8 m) `REMINDING` → (bạn đến trong ~3,6 m) `RESUMING` → `LEADING` → đến điểm dừng → `EXPLAINING` (khi bạn ở gần; tạm dừng nếu bạn đi xa) → `WAITING`. Ngoài ra còn `LISTENING` khi bạn mở hộp hỏi đáp và `FOLLOWING` ở chế độ tự do. Mỗi chuyển trạng thái theo khoảng cách có ngưỡng vào/ra khác nhau cộng thời gian chờ để không rung trạng thái. Tất cả thông số nằm trong `lib/game/config.ts`.
+Số liệu đo trên GPU tích hợp Intel UHD Graphics (Chrome, ANGLE D3D11, 1280×800, chất lượng cao):
 
-</details>
+| Khu vực | FPS | Draw call |
+|---|---|---|
+| Ngoài trời | ≈ 61 | 301 |
+| Đại sảnh và cầu thang | ≈ 102 | 166 |
+| Phòng họp Nội các | ≈ 85 | 208 |
+| Phòng tầng 2 | ≈ 92 | 108–113 |
 
-<details>
-<summary><b>Chuyển cảnh bản đồ ↔ Dinh</b></summary>
-
-Next.js 16 giữ trang đã xem trong React `<Activity>`. Khi trang bị ẩn, React Three Fiber hủy WebGL context, vì vậy mỗi lần trang hiện lại thì canvas được gắn mới (`lib/useVisitKey.ts`). Thành phố đã dựng được giữ trong bộ nhớ, nên quay lại không phải dựng lại. Cảnh Dinh chỉ hiện sau khi shader đã biên dịch xong.
-
-</details>
+- Mỗi phòng tải lần đầu trong 80–610 ms.
+- Có 3 mức đồ họa: Thấp / Trung bình / Cao.
+- Chưa đo trên GPU rời và thiết bị di động.
 
 ## 🧪 Kiểm thử
 
-Dự án có 92 kiểm thử tự động (Vitest), gồm:
+92 kiểm thử tự động (Vitest), gồm:
 
 - **Kho tri thức:** toàn vẹn dữ liệu, nguồn, i18n, truy xuất câu trả lời.
-- **Vật lý:** một capsule dùng character controller Rapier đi từ cổng lên sân thượng, xuống tầng hầm, tới các hiện vật theo tuyến đã lập; tường chặn được.
-- **Tìm đường:** từ 7 điểm xuất phát tới mọi điểm đến; tuyến được kiểm tra độc lập là không xuyên vật cản, chỉ đổi tầng qua cầu thang, đi vòng quanh thảm cỏ.
-- **Minh Anh:** dẫn trước, dừng chờ, nhắc có giới hạn, không rung trạng thái, đi tiếp khi bắt kịp, chỉ thuyết minh đúng lúc, không đi khi không có tuyến.
-- **Thành phố:** mặt đường hướng lên, xe không chồng nhau và không kẹt cứng, thuyền luôn trên mặt nước, chim bay trên mái nhà.
+- **Vật lý:** capsule Rapier đi theo các tuyến đã lập; tường và nội thất chặn được.
+- **Tìm đường:** mọi cạnh của đồ thị đi bộ không xuyên vật cản; tuyến chỉ đổi tầng qua cầu thang.
+- **Không gian và cửa:** mỗi cửa đi được hai chiều, điểm xuất hiện nằm trên sàn của không gian đích, đồ thị kết nối giữa các không gian, tải và giải phóng.
+- **Minh Anh:** dẫn trước, chờ, nhắc có giới hạn, không rung trạng thái, chỉ thuyết minh đúng lúc.
+- **Thành phố:** mặt đường hướng lên, xe không chồng nhau, thuyền luôn trên nước, địa danh và vùng ngoại vi đúng vị trí.
+
+```bash
+npm test
+```
 
 ## 📚 Độ chính xác lịch sử
 
-Ứng dụng tách rõ điều đã được kiểm chứng với điều là ước lượng hoặc mô phỏng; toàn bộ nguồn xem tại trang `/sources`.
+Ứng dụng tách rõ điều đã kiểm chứng với điều là ước lượng hoặc mô phỏng. Toàn bộ nguồn xem tại trang `/sources`.
 
 | Thành phần | Trạng thái |
 |---|---|
 | Đường phố, sông, công viên, đường bao công trình | Dữ liệu OSM thật (ODbL) |
-| Kiểu kiến trúc, màu sắc từng công trình; nhà phố lấp đầy | **Sinh tự động**, không phải kiến trúc thật |
-| Khuôn viên 300 × 400 m, thảm cỏ 102 m, khối nhà 4.500 m², cao 26 m, KTS Ngô Viết Thụ | Theo [dinhdoclap.gov.vn](https://dinhdoclap.gov.vn/kien-truc-dinh-doc-lap/) |
-| Cách chia khối chữ T, chiều cao tầng, vị trí phòng, tầng hầm | **Ước lượng / mô phỏng** (không có mặt bằng chi tiết công khai) |
-| Vật liệu: mặt tiền trắng, sàn granite tối, thảm vàng + rèm đỏ (Trình Quốc thư), thảm + rèm xanh (Nội các), rèm hoa đá dạng đốt trúc | Theo ảnh trên trang chính thức; texture **sinh bằng mã** |
-| Chiều cao dải rèm hoa đá, vị trí tâm thảm cỏ | **Ước lượng** theo ảnh và sơ đồ tham quan |
-| Tranh sơn mài trong Phòng Trình Quốc thư | Chỉ là khung minh họa, không tái tạo tác phẩm thật |
-| Tuyến xe, tàu thuyền, đèn tín hiệu, người đi bộ | **Mô phỏng** |
+| Kiểu kiến trúc và màu từng công trình trên bản đồ | Sinh tự động, không phải kiến trúc thật |
+| Khuôn viên 120.000 m², thảm cỏ đường kính 102 m, khối nhà 4.500 m², cao 26 m, rèm hoa đá quanh lầu 2, hồ sen bán nguyệt | Theo [dinhdoclap.gov.vn](https://dinhdoclap.gov.vn/kien-truc-dinh-doc-lap/) |
+| Vị trí tương đối các phòng tầng 1 | Theo mô tả của trang chính thức |
+| Phòng Tiếp khách Tổng thống ở tầng 2: hai tủ sơn mài Mai Lan Cúc Trúc, ghế Tổng thống trước tấm gỗ tượng trưng quốc kỳ | Theo trang chính thức |
+| Hai vòng đỏ trên sân đáp đánh dấu chỗ bom rơi ngày 8/4/1975, trực thăng UH-1 trên sân thượng | Theo trang chính thức |
+| Kích thước phòng, chiều cao tầng, vị trí phòng tầng 2, giếng trời, bố cục cầu thang | **Ước lượng** (không có mặt bằng đo đạc công khai) |
+| Tên các phòng tiếp khách nhóm ảnh 12–14 | **Chưa xác minh**, dùng tên mô tả |
+| Tranh, hoa văn cánh tủ, bản đồ trong hầm | Minh họa, không sao chép tác phẩm |
+| Tuyến xe, tàu thuyền, người đi bộ | Mô phỏng |
 
-Ảnh tư liệu của Di tích không được nhúng lại; ứng dụng dẫn liên kết tới trang nguồn kèm chú thích.
+Ảnh tư liệu của Di tích không được nhúng lại; ứng dụng dẫn liên kết tới trang nguồn.
 
 ## 🚧 Giới hạn & hướng phát triển
 
-- Nhân vật và kiến trúc dựng bằng mã; nên thay bằng mô hình GLB có giấy phép (nhân vật có rig, mô hình Dinh từ bản vẽ đo đạc). Giao diện `HumanoidAnim` và `palaceModel` đã tách sẵn để thay.
-- Chỉ đi được tầng nền, tầng hầm và sân thượng; các tầng lầu “chưa mô hình hóa”. Có lối tắt cầu thang (<kbd>E</kbd>).
-- Giọng nói phụ thuộc hạn mức của dịch vụ Azure; khi hết hạn mức, câu trả lời vẫn hiển thị đầy đủ dưới dạng phụ đề. Tiếng Việt hiện chỉ có hai giọng bản xứ (HoaiMy nữ, NamMinh nam).
-- Hoạt ảnh miệng chưa có lip-sync; nhân vật chỉ chuyển sang hoạt ảnh “nói” khi đang phát tiếng.
-- Chưa có nhập câu hỏi bằng giọng nói (micro).
-- Hiệu năng cần đo thêm trên nhiều cấu hình máy; có 3 mức đồ họa Thấp/Trung bình/Cao.
+- Các tầng lầu 3 trở lên và nhiều phòng (trong đó có Phòng chiếu phim / Giải trí) chưa được dựng, vì thiếu nguồn xác minh vị trí và bố cục.
+- Nhân vật, cây và trực thăng là mô hình dựng bằng mã, mức chi tiết vừa phải. Có thể thay bằng mô hình GLB có giấy phép.
+- Giọng nói phụ thuộc hạn mức của Azure. Khi hết hạn mức, câu trả lời vẫn hiển thị đầy đủ dưới dạng phụ đề.
+- Chưa có lip-sync và chưa có nhập câu hỏi bằng giọng nói.
 
 ## 🙏 Nguồn dữ liệu & ghi công
 
 - Dữ liệu bản đồ © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), giấy phép ODbL 1.0.
 - Tư liệu lịch sử và kiến trúc: [Di tích lịch sử Dinh Độc Lập — dinhdoclap.gov.vn](https://dinhdoclap.gov.vn).
-- Giọng đọc: [Azure AI Speech](https://learn.microsoft.com/azure/ai-services/speech-service/) (HoaiMy, Jenny).
-- AI: [Google Gemini API](https://ai.google.dev).
+- Giọng đọc: [Azure AI Speech](https://learn.microsoft.com/azure/ai-services/speech-service/). AI: [Google Gemini API](https://ai.google.dev).
 
 Danh mục đầy đủ tài sản và giấy phép nằm trong `data/assets.ts` và trang `/sources`.
 
 ## 📄 Giấy phép
 
-Chưa chọn giấy phép cho mã nguồn: mọi quyền thuộc về tác giả cho đến khi có file `LICENSE`. Dữ liệu OSM trong `public/data/city.json` tuân theo ODbL 1.0.
+Chưa chọn giấy phép cho mã nguồn: mọi quyền thuộc về tác giả cho đến khi có file `LICENSE`. Dữ liệu OSM trong `public/data/` tuân theo ODbL 1.0.
