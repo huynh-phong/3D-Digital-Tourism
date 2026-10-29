@@ -16,7 +16,7 @@ Hướng dẫn viên AI **Minh Anh** dẫn đường, thuyết minh song ngữ v
 [![Tests](https://img.shields.io/badge/tests-92%20passing-2ea44f)](#-kiểm-thử)
 [![OSM](https://img.shields.io/badge/data-OpenStreetMap%20ODbL-7EBC6F?logo=openstreetmap&logoColor=fff)](https://www.openstreetmap.org/copyright)
 
-[Giới thiệu](#-giới-thiệu) · [Bắt đầu](#-bắt-đầu) · [Dinh Độc Lập](#️-dinh-độc-lập-3d) · [Minh Anh](#-hướng-dẫn-viên-ai-minh-anh) · [Kiến trúc mã](#-kiến-trúc-mã) · [Độ chính xác](#-độ-chính-xác-lịch-sử)
+[Giới thiệu](#-giới-thiệu) · [Ảnh chụp](#-ảnh-chụp) · [Dinh Độc Lập](#️-dinh-độc-lập-3d) · [Minh Anh](#-hướng-dẫn-viên-ai-minh-anh) · [Kiến trúc](#-công-nghệ--kiến-trúc) · [Độ chính xác](#-độ-chính-xác-lịch-sử)
 
 </div>
 
@@ -49,47 +49,6 @@ Hướng dẫn viên AI **Minh Anh** dẫn đường, thuyết minh song ngữ v
 | ![Cổng chính](docs/screenshots/main-gate.jpg) | ![Minh Anh](docs/screenshots/guide-explaining.jpg) |
 
 <sub>Ảnh chụp từ ứng dụng trong trình duyệt headless. Một số ảnh đã ẩn giao diện.</sub>
-
-## 🚀 Bắt đầu
-
-**Yêu cầu:** Node.js 20 trở lên và npm.
-
-```bash
-git clone https://github.com/huynh-phong/3D-Digital-Tourism.git
-```
-
-```bash
-cd 3D-Digital-Tourism && npm install
-```
-
-```bash
-npm run dev
-```
-
-Mở `http://localhost:3000`: trang chủ là bản đồ, còn `/dinh-doc-lap` là chuyến tham quan.
-
-### Biến môi trường (tùy chọn)
-
-Không có khóa API, ứng dụng vẫn chạy: Minh Anh trả lời bằng trích dẫn từ kho tư liệu và chỉ hiện phụ đề. Để bật AI và giọng nói, sao chép `.env.example` thành `.env.local` rồi điền:
-
-| Biến | Dùng cho |
-|---|---|
-| `AI_PROVIDER`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_FALLBACK_MODELS` | Hỏi đáp bằng Google Gemini (có model dự phòng) |
-| `ANTHROPIC_API_KEY`, `AI_MODEL` | Nhà cung cấp AI thay thế |
-| `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION`, `AZURE_VOICE_VI`, `AZURE_VOICE_EN` | Giọng đọc Azure AI Speech |
-
-Khóa chỉ được dùng phía server, không bao giờ gửi xuống trình duyệt. **Không commit file `.env`.** Khi triển khai lên Vercel, thêm các biến này trong *Project → Settings → Environment Variables*.
-
-### Lệnh
-
-| Lệnh | Tác dụng |
-|---|---|
-| `npm run dev` | Chạy máy chủ phát triển |
-| `npm run build` / `npm start` | Build và chạy bản production |
-| `npm test` | Chạy 92 kiểm thử (Vitest) |
-| `npm run lint` · `npm run typecheck` | ESLint · kiểm tra kiểu TypeScript |
-| `npm run data:osm` | Tải lại dữ liệu OSM vùng trung tâm vào `public/data/city.json` |
-| `node scripts/fetch-outskirts.mjs` | Tải lại đường và sông vùng ngoại vi vào `public/data/outskirts.json` |
 
 ## 🏛️ Dinh Độc Lập 3D
 
@@ -172,7 +131,7 @@ flowchart LR
 
 Mọi phím (trừ Esc) đổi được trong phần Cài đặt. Thiết bị cảm ứng có cần điều khiển ảo.
 
-## 🧱 Kiến trúc mã
+## 🧱 Công nghệ & kiến trúc
 
 **Công nghệ:** Next.js 16 (App Router) · React 19 · Three.js + React Three Fiber + drei · Rapier (vật lý) · Zustand · Framer Motion · Tailwind CSS 4 · zod · Vitest.
 
@@ -230,10 +189,6 @@ Số liệu đo trên GPU tích hợp Intel UHD Graphics (Chrome, ANGLE D3D11, 1
 - **Không gian và cửa:** mỗi cửa đi được hai chiều, điểm xuất hiện nằm trên sàn của không gian đích, đồ thị kết nối giữa các không gian, tải và giải phóng.
 - **Minh Anh:** dẫn trước, chờ, nhắc có giới hạn, không rung trạng thái, chỉ thuyết minh đúng lúc.
 - **Thành phố:** mặt đường hướng lên, xe không chồng nhau, thuyền luôn trên nước, địa danh và vùng ngoại vi đúng vị trí.
-
-```bash
-npm test
-```
 
 ## 📚 Độ chính xác lịch sử
 
