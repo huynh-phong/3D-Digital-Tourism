@@ -23,18 +23,29 @@ export const TILE: Record<FacadeStyle, { w: number; h: number }> = {
 };
 
 const C = (h: string) => new THREE.Color(h);
-/** Bright, saturated "miniature city" palette. */
+/**
+ * "Miniature city" palette, softened toward the reference look: cream, sand,
+ * sage and pale teal walls, terracotta tile roofs, muted metal roofs, glass in
+ * grey-teal. Saturated colours are kept for small accents (awnings, signs).
+ */
 export const PALETTE = {
-  pastel: ["#f6c2c9", "#f8d877", "#a8e0c9", "#9fd3ef", "#f7b37a", "#fbe7b0", "#c9b8ef", "#f39c8a", "#ffffff", "#bfe59a", "#f4a9b8", "#ffe08a"].map(C),
-  apartment: ["#f3efe6", "#f6d7a7", "#cfe7f2", "#e9b9a5", "#d7ecc9", "#fff3d6", "#f1c6b3"].map(C),
-  office: ["#e8e4dc", "#d5dde4", "#f0e6d2", "#c9d6cf"].map(C),
-  glass: ["#5fb3d9", "#3f8fc1", "#5cc3b5", "#7fa9d6", "#4aa3a0"].map(C),
-  colonial: ["#f2cf6b", "#f6e3a4", "#e9b980", "#fff1c9"].map(C),
-  roofTile: ["#d8552f", "#e76f2e", "#c4462e", "#e0833a", "#b8452f"].map(C),
-  roofMetal: ["#3f8f7a", "#3a7fbf", "#5aa66b", "#2f6f9e", "#c9d1d6"].map(C),
-  roofFlat: ["#d9d3c7", "#e8b49a", "#cfe3c2", "#cfe0ea", "#f2efe8", "#e9d9a8", "#c9c4bb"].map(C),
-  awning: ["#e8453c", "#2f7fd1", "#2fa36b", "#f2b630", "#ef7a2b", "#ffffff"].map(C),
-  sign: ["#e63946", "#1d7fd1", "#f4b400", "#2a9d8f", "#ff7f11", "#7b2cbf"].map(C),
+  pastel: [
+    "#f7ecd4", "#f4dcae", "#d4e7bd", "#c3e3d6", "#b9e0e2", "#c8dbef", "#f6bea4", "#f0a98f",
+    "#f8e49e", "#efe7d8", "#ddeec8", "#fae1c2", "#f8cfcf", "#fff3da", "#e6d6f0", "#cfe9f0",
+  ].map(C),
+  apartment: ["#f7f0e0", "#f2dfbb", "#d4e6d6", "#c8e0de", "#efd5bc", "#f6ecd8", "#d6e2c2", "#e4ebe6", "#f6e3c9"].map(C),
+  office: ["#f1ece0", "#dde6e4", "#f2e7d0", "#d6e3d8", "#e9e4f0"].map(C),
+  glass: ["#9cc6d4", "#8dbad0", "#a8d0da", "#86b6c8", "#9cc8c2", "#b1cfe0"].map(C),
+  colonial: ["#f2d98f", "#f6e7b8", "#ebc597", "#f8ecce"].map(C),
+  roofTile: ["#d95a3b", "#e46c42", "#cf4f37", "#e08053", "#d4643f", "#c94c33"].map(C),
+  roofMetal: ["#6aaa9b", "#7fa6c4", "#8fbb7c", "#6b98b3", "#c3ccce", "#d98a5b"].map(C),
+  roofFlat: ["#ece4d3", "#ded8ca", "#d2dcc6", "#f0e3c8", "#e2dccc", "#e8d9b8", "#d8d6cc"].map(C),
+  awning: ["#c8553d", "#2f8f86", "#ddb85e", "#e9e1cf", "#d98a5b", "#5a7fa8"].map(C),
+  sign: ["#b94537", "#2f8f86", "#ddb85e", "#5a7fa8", "#d98a5b", "#7a5a8f"].map(C),
+  planter: ["#7fb55e", "#6fa85a", "#97c26b"].map(C),
+  /** window surrounds / shutters: white, cream, and painted accents */
+  trim: ["#fbf7ee", "#f4ead6", "#ffffff", "#e8efe9"].map(C),
+  shutter: ["#3f8f7a", "#2f7fb0", "#a8643f", "#5f9e4e", "#2e8f9f", "#c45f43", "#6d7fb8"].map(C),
 };
 
 export interface Buckets {
@@ -166,6 +177,70 @@ function rooftopKit(B: Buckets, p: P2[], top: number, R: () => number, big: bool
   }
 }
 
+/**
+ * Projecting floor slabs (gờ tầng) every `every` storeys: a thin outward ring
+ * whose top catches the light, so tall blocks read as stacked floors rather
+ * than plain boxes (as in the close-up reference of the city).
+ */
+function floorLedges(B: Buckets, p: P2[], storeyH: number, floors: number, every: number, col: THREE.Color) {
+  const out = offsetPolygon(p, -0.3);
+  if (out.length !== p.length) return;
+  const top = col.clone().lerp(new THREE.Color("#ffffff"), 0.25);
+  let n = 0;
+  for (let f = every; f < floors && n < 4; f += every, n++) {
+    const y = f * storeyH;
+    for (let i = 0; i < p.length; i++) {
+      const a = p[i], c = p[(i + 1) % p.length], ao = out[i], co = out[(i + 1) % p.length];
+      if (Math.hypot(c[0] - a[0], c[1] - a[1]) < 4) continue;
+      const [nx, nz] = edgeNormal(p, i);
+      quad(B.details, [ao[0], y - 0.2, ao[1]], [co[0], y - 0.2, co[1]], [co[0], y, co[1]], [ao[0], y, ao[1]], [nx, 0, nz], col);
+      quad(B.details, [a[0], y, a[1]], [c[0], y, c[1]], [co[0], y, co[1]], [ao[0], y, ao[1]], [0, 1, 0], top);
+    }
+  }
+}
+
+/** Box balconies with railings on the longest facade of an apartment block. */
+function balconies(B: Buckets, p: P2[], storeyH: number, floors: number, wall: THREE.Color, R: () => number) {
+  let best = -1, len = 0;
+  for (let i = 0; i < p.length; i++) {
+    const a = p[i], c = p[(i + 1) % p.length], l = Math.hypot(c[0] - a[0], c[1] - a[1]);
+    if (l > len) { len = l; best = i; }
+  }
+  if (len < 7) return;
+  const a = p[best], c = p[(best + 1) % p.length];
+  const [nx, nz] = edgeNormal(p, best);
+  const ux = (c[0] - a[0]) / len, uz = (c[1] - a[1]) / len;
+  const ry = -Math.atan2(c[1] - a[1], c[0] - a[0]);
+  const slab = wall.clone().lerp(new THREE.Color("#ffffff"), 0.3);
+  const rail = new THREE.Color("#4a4a46");
+  const bay = TILE.apartment.w * 2;
+  const nb = Math.min(3, Math.floor(len / bay));
+  const off = (len - nb * bay) / 2 + bay / 2;
+  let count = 0;
+  for (let f = 1; f < Math.min(floors, 9) && count < 8; f += 2) {
+    for (let k = 0; k < nb && count < 8; k++) {
+      if (R() < 0.3) continue;
+      const t = off + k * bay, y = f * storeyH;
+      const x = a[0] + ux * t + nx * 0.55, z = a[1] + uz * t + nz * 0.55;
+      box(B.details, [x, y + 0.08, z], [2.6, 0.16, 1.1], ry, slab);
+      box(B.details, [x + nx * 0.5, y + 0.6, z + nz * 0.5], [2.6, 0.85, 0.07], ry, rail);
+      count++;
+    }
+  }
+}
+
+/** Potted plants / small roof gardens on flat roofs (frequent on Saigon rooftops). */
+function roofGarden(B: Buckets, p: P2[], top: number, R: () => number) {
+  const o = obb(p);
+  if (o.len < 5 || o.wid < 4) return;
+  const n = 2 + Math.floor(R() * 3);
+  for (let i = 0; i < n; i++) {
+    const u = (R() - 0.5) * (o.len - 2.5), v = (R() - 0.5) * (o.wid - 2.5);
+    const x = o.cx + o.ux * u - o.uz * v, z = o.cz + o.uz * u + o.ux * v;
+    box(B.details, [x, top + 0.35, z], [0.9, 0.7, 0.9], Math.atan2(o.uz, o.ux), pick(PALETTE.planter, R));
+  }
+}
+
 /** Street-front details for shophouses: balconies, awning, shop sign. */
 function shopFront(B: Buckets, p: P2[], front: number, floors: number, wall: THREE.Color, R: () => number) {
   const a = p[front], c = p[(front + 1) % p.length];
@@ -183,7 +258,9 @@ function shopFront(B: Buckets, p: P2[], front: number, floors: number, wall: THR
     if (R() < 0.35) continue;
     const y = g + f * TILE.shop.h;
     box(B.details, at(0.45, y + 0.08), [len - 0.5, 0.16, 0.9], ry, slab);
-    box(B.details, at(0.88, y + 0.55), [len - 0.5, 0.8, 0.06], ry, rail);
+    // low parapet + slim iron top rail (a solid 0.8 m dark panel read as a black slab)
+    box(B.details, at(0.88, y + 0.38), [len - 0.5, 0.45, 0.07], ry, slab.clone().lerp(WHITE, 0.25));
+    box(B.details, at(0.88, y + 0.9), [len - 0.5, 0.05, 0.09], ry, rail);
     n++;
   }
   if (R() < 0.75) {
@@ -193,6 +270,130 @@ function shopFront(B: Buckets, p: P2[], front: number, floors: number, wall: THR
   if (R() < 0.6) {
     box(B.details, at(0.12, g + 0.35), [len * 0.8, 0.7, 0.12], ry, pick(PALETTE.sign, R), 0, new THREE.Color("#ffffff"));
   }
+}
+
+const WHITE = new THREE.Color("#ffffff");
+
+/**
+ * Street parapet of a flat-roofed shophouse (mặt tiền giả): the front wall rises
+ * above the roof with a cornice and either a stepped crest or a short tiled
+ * canopy — the typical Saigon tube-house silhouette.
+ */
+function frontParapet(B: Buckets, p: P2[], front: number, top: number, wall: THREE.Color, R: () => number) {
+  const a = p[front], c = p[(front + 1) % p.length];
+  const len = Math.hypot(c[0] - a[0], c[1] - a[1]);
+  if (len < 3) return;
+  const [nx, nz] = edgeNormal(p, front);
+  const ry = -Math.atan2(c[1] - a[1], c[0] - a[0]);
+  const mx = (a[0] + c[0]) / 2 - nx * 0.15, mz = (a[1] + c[1]) / 2 - nz * 0.15;
+  const h = 1.3 + R() * 0.9;
+  const col = wall.clone().lerp(WHITE, 0.12);
+  box(B.details, [mx, top + h / 2, mz], [len, h, 0.3], ry, col);
+  box(B.details, [mx + nx * 0.12, top + h, mz + nz * 0.12], [len + 0.1, 0.16, 0.55], ry, col.clone().lerp(WHITE, 0.3));
+  if (R() < 0.5) box(B.details, [mx, top + h + 0.4, mz], [len * 0.42, 0.8, 0.3], ry, col);
+  else box(B.details, [mx + nx * 0.5, top + h * 0.5, mz + nz * 0.5], [len, 0.12, 1.1], ry, pick(PALETTE.roofTile, R), -0.45);
+}
+
+/** Stair hut on a flat roof (tum thang) with its own little tiled gable roof. */
+function stairHut(B: Buckets, p: P2[], top: number, wall: THREE.Color, R: () => number) {
+  const o = obb(p);
+  if (o.len < 7 || o.wid < 3.4) return;
+  const ww = Math.min(3.2, o.wid - 0.8), wl = 3.4, h = 2.6;
+  const u = (R() < 0.5 ? -1 : 1) * (o.len / 2 - wl / 2 - 1.2);
+  const x = o.cx + o.ux * u, z = o.cz + o.uz * u;
+  const ry = -Math.atan2(o.uz, o.ux);
+  box(B.details, [x, top + h / 2, z], [wl, h, ww], ry, wall.clone().lerp(WHITE, 0.08));
+  const roof = pick(PALETTE.roofTile, R), t = 0.5, half = ww / 2 + 0.3;
+  const ridge = top + h + (ww / 2) * Math.tan(t);
+  for (const side of [1, -1]) {
+    const off = (half / 2) * side;
+    box(B.details, [x - o.uz * off, ridge - (half / 2) * Math.tan(t), z + o.ux * off], [wl + 0.5, 0.15, half / Math.cos(t)], ry, roof, t * side);
+  }
+}
+
+/** Vertical fins (lam đứng) on the longest facade of an office block. */
+function facadeFins(B: Buckets, p: P2[], top: number, wall: THREE.Color) {
+  let best = -1, len = 0;
+  for (let i = 0; i < p.length; i++) {
+    const l = Math.hypot(p[(i + 1) % p.length][0] - p[i][0], p[(i + 1) % p.length][1] - p[i][1]);
+    if (l > len) { len = l; best = i; }
+  }
+  if (len < 12) return;
+  const a = p[best], c = p[(best + 1) % p.length];
+  const [nx, nz] = edgeNormal(p, best);
+  const ux = (c[0] - a[0]) / len, uz = (c[1] - a[1]) / len, ry = -Math.atan2(uz, ux);
+  const n = Math.min(10, Math.floor(len / TILE.office.w));
+  const col = wall.clone().lerp(WHITE, 0.35);
+  for (let k = 1; k < n; k++) {
+    const t = (k / n) * len;
+    box(B.details, [a[0] + ux * t + nx * 0.35, top / 2, a[1] + uz * t + nz * 0.35], [0.25, top, 0.7], ry, col);
+  }
+}
+
+/**
+ * Street facade of a shophouse, in real geometry (not texture): a moulded
+ * band at every floor, window surrounds lined up with the facade texture's
+ * windows (sill and hood; jambs on some houses) in a contrasting colour,
+ * louvred shutter panels on some houses, pilasters framing the shop, and on
+ * some houses balconies on every upper floor (or a recessed loggia band).
+ */
+function streetFacade(B: Buckets, p: P2[], front: number, floors: number, wall: THREE.Color, R: () => number) {
+  const a = p[front], c = p[(front + 1) % p.length];
+  const len = Math.hypot(c[0] - a[0], c[1] - a[1]);
+  if (len < 2.5) return;
+  const [nx, nz] = edgeNormal(p, front);
+  const ux = (c[0] - a[0]) / len, uz = (c[1] - a[1]) / len;
+  const ry = -Math.atan2(uz, ux);
+  const at = (t: number, out: number, y: number): [number, number, number] => [a[0] + ux * t + nx * out, y, a[1] + uz * t + nz * out];
+  const g = TILE.shopfront.h, fh = TILE.shop.h;
+  const trimCol = pick(PALETTE.trim, R);
+  const band = wall.clone().lerp(WHITE, 0.4);
+  const shutters = R() < 0.4 ? pick(PALETTE.shutter, R) : null;
+  const jambs = R() < 0.25;
+  const style = R(); // < 0.3: balconies on every floor, < 0.45: recessed loggias, else windows only
+  // shop pilasters at both ends of the ground floor
+  for (const t of [0.18, len - 0.18]) box(B.details, at(t, 0.12, g / 2), [0.36, g, 0.3], ry, band);
+  const bays = Math.max(1, Math.round(len / TILE.shop.w)), bw = len / bays;
+  for (let f = 0; f < floors - 1; f++) {
+    const y0 = g + f * fh;
+    // moulded floor band
+    box(B.details, at(len / 2, 0.14, y0 + 0.08), [len, 0.2, 0.3], ry, band);
+    if (style < 0.3 && f < 4) {
+      box(B.details, at(len / 2, 0.5, y0 + 0.1), [len - 0.3, 0.16, 0.95], ry, band);
+      // balustrade: low parapet in the band colour + a slim metal top rail
+      box(B.details, at(len / 2, 0.95, y0 + 0.42), [len - 0.3, 0.5, 0.08], ry, band);
+      box(B.details, at(len / 2, 0.95, y0 + 0.96), [len - 0.3, 0.05, 0.1], ry, new THREE.Color("#55606a"));
+      continue; // balcony floors use the texture's French doors
+    }
+    if (style < 0.45) {
+      // loggia: a deep frame round the whole floor's opening
+      box(B.details, at(len / 2, 0.25, y0 + fh - 0.25), [len - 0.2, 0.3, 0.5], ry, trimCol);
+      for (const t of [0.15, len - 0.15]) box(B.details, at(t, 0.25, y0 + fh / 2), [0.3, fh - 0.3, 0.5], ry, trimCol);
+      continue;
+    }
+    for (let k = 0; k < bays; k++) {
+      const t = (k + 0.5) * bw, ww = bw * 0.48;
+      box(B.details, at(t, 0.12, y0 + 0.6), [ww + 0.3, 0.12, 0.28], ry, trimCol); // sill
+      box(B.details, at(t, 0.16, y0 + 2.92), [ww + 0.45, 0.16, 0.36], ry, trimCol); // hood
+      if (jambs) for (const s of [-1, 1]) box(B.details, at(t + s * (ww / 2 + 0.06), 0.08, y0 + 1.76), [0.12, 2.2, 0.16], ry, trimCol);
+      if (shutters && bw > 2.6) for (const s of [-1, 1]) box(B.details, at(t + s * (ww / 2 + 0.38), 0.07, y0 + 1.72), [0.55, 2.0, 0.08], ry, shutters);
+    }
+  }
+}
+
+/** Light roof canopy over a roof terrace: four posts and a sloped sheet. */
+function roofCanopy(B: Buckets, p: P2[], top: number, R: () => number) {
+  const o = obb(p);
+  if (o.len < 5 || o.wid < 3.5) return;
+  const L = Math.min(4.5, o.len * 0.45), W = Math.min(3.6, o.wid - 0.8);
+  const u = (R() < 0.5 ? -1 : 1) * (o.len / 2 - L / 2 - 0.6);
+  const cx = o.cx + o.ux * u, cz = o.cz + o.uz * u, ry = -Math.atan2(o.uz, o.ux);
+  const post = new THREE.Color("#5b6066");
+  for (const su of [-1, 1]) for (const sv of [-1, 1]) {
+    const x = cx + o.ux * su * (L / 2 - 0.15) - o.uz * sv * (W / 2 - 0.15), z = cz + o.uz * su * (L / 2 - 0.15) + o.ux * sv * (W / 2 - 0.15);
+    box(B.details, [x, top + 1.25, z], [0.12, 2.5, 0.12], ry, post);
+  }
+  box(B.details, [cx, top + 2.55, cz], [L + 0.4, 0.1, W + 0.4], ry, pick(PALETTE.roofMetal, R), 0.12);
 }
 
 /** Close enough to a rectangle for a pitched roof that follows its oriented box. */
@@ -221,9 +422,17 @@ export function addBuilding(B: Buckets, s: BuildingSpec): number {
       else if (r < 0.55 && pitched) pitchedRoof(B, p, top, "shop", wall, "metal", pick(PALETTE.roofMetal, R), false);
       else {
         flatRoofWithParapet(B, p, top, "shop", wall, R);
-        if (s.detail !== false) rooftopKit(B, p, top, R, false);
+        if (s.detail !== false) {
+          rooftopKit(B, p, top, R, false);
+          if (s.front !== undefined && R() < 0.6) frontParapet(B, p, s.front, top, wall, R);
+          if (floors >= 2 && R() < 0.4) stairHut(B, p, top, wall, R);
+          else if (R() < 0.3) roofCanopy(B, p, top, R);
+        }
       }
-      if (s.front !== undefined && s.detail !== false) shopFront(B, p, s.front, floors, wall, R);
+      if (s.front !== undefined && s.detail !== false) {
+        shopFront(B, p, s.front, floors, wall, R);
+        streetFacade(B, p, s.front, floors, wall, R);
+      }
       return top;
     }
     case "colonial": {
@@ -241,7 +450,12 @@ export function addBuilding(B: Buckets, s: BuildingSpec): number {
       const top = floors * TILE.apartment.h;
       walls(B.walls.apartment, p, 0, top, "apartment", wall);
       flatRoofWithParapet(B, p, top, "apartment", wall, R);
-      if (s.detail !== false) rooftopKit(B, p, top, R, R() < 0.5);
+      if (s.detail !== false) {
+        rooftopKit(B, p, top, R, R() < 0.5);
+        if (floors >= 3) floorLedges(B, p, TILE.apartment.h, floors, floors > 8 ? 3 : 2, wall.clone().multiplyScalar(0.9));
+        if (floors >= 3 && R() < 0.6) balconies(B, p, TILE.apartment.h, floors, wall, R);
+        if (R() < 0.3) roofGarden(B, p, top, R);
+      }
       return top;
     }
     case "office": {
@@ -249,6 +463,8 @@ export function addBuilding(B: Buckets, s: BuildingSpec): number {
       walls(B.walls.office, p, 0, top, "office", wall);
       flatRoofWithParapet(B, p, top, "office", wall, R);
       rooftopKit(B, p, top, R, true);
+      if (s.detail !== false && floors >= 4) floorLedges(B, p, TILE.office.h, floors, 2, wall.clone().multiplyScalar(0.88));
+      if (s.detail !== false && floors >= 6 && R() < 0.45) facadeFins(B, p, top, wall);
       return top;
     }
     case "tower": {
@@ -260,10 +476,22 @@ export function addBuilding(B: Buckets, s: BuildingSpec): number {
       cap(B.roofs.flat, p, pTop, PALETTE.roofFlat[0], 0.25);
       const body = offsetPolygon(p, Math.min(2.5, Math.sqrt(Math.abs(signedArea(p))) * 0.08));
       const sTop = pTop + shaft * TILE.glass.h;
-      walls(B.walls.glass, body, pTop, sTop, "glass", wall);
-      const crown = offsetPolygon(body, Math.min(2, Math.sqrt(Math.abs(signedArea(body))) * 0.1));
+      // tall towers step back once (giật cấp) about 60 % of the way up
+      let upper = body;
+      if (shaft >= 18 && R() < 0.5) {
+        const step = offsetPolygon(body, Math.min(3, Math.sqrt(Math.abs(signedArea(body))) * 0.12));
+        if (step.length === body.length && Math.abs(signedArea(step)) > 60) {
+          const mid = pTop + Math.round(shaft * 0.6) * TILE.glass.h;
+          walls(B.walls.glass, body, pTop, mid, "glass", wall);
+          cap(B.roofs.flat, body, mid + 0.01, PALETTE.roofFlat[2], 0.25);
+          walls(B.walls.glass, step, mid, sTop, "glass", wall.clone().lerp(WHITE, 0.08));
+          upper = step;
+        }
+      }
+      if (upper === body) walls(B.walls.glass, body, pTop, sTop, "glass", wall);
+      const crown = offsetPolygon(upper, Math.min(2, Math.sqrt(Math.abs(signedArea(upper))) * 0.1));
       walls(B.walls.glass, crown, sTop, sTop + 2 * TILE.glass.h, "glass", wall.clone().lerp(new THREE.Color("#ffffff"), 0.15));
-      cap(B.roofs.flat, body, sTop + 0.01, PALETTE.roofFlat[2], 0.25);
+      cap(B.roofs.flat, upper, sTop + 0.01, PALETTE.roofFlat[2], 0.25);
       flatRoofWithParapet(B, crown, sTop + 2 * TILE.glass.h, "office", PALETTE.office[1], R);
       rooftopKit(B, crown, sTop + 2 * TILE.glass.h, R, true);
       return sTop + 2 * TILE.glass.h;

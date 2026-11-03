@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CONTEXT_BUILDINGS, LANDMARKS, project } from "@/data/landmarks";
-import { buildCity, CITY_BOUNDS, clipPolyline, edgeKeep, pointInPolygon, type CityBuild } from "@/lib/city/buildCity";
+import { buildCity, CITY_BOUNDS, clipPolyline, edgeKeep, MAP_RECT, pointInPolygon, type CityBuild } from "@/lib/city/buildCity";
 import type { CityData } from "@/lib/city/types";
+import type { BufferGeometry } from "three";
 
 const city: CityData = JSON.parse(readFileSync("public/data/city.json", "utf8"));
 const inCity = ([x, z]: [number, number], pad = 0) =>
@@ -89,14 +90,36 @@ describe("map frame", () => {
     }
   });
 
-  it("thins the city out toward its edge instead of cutting it straight", () => {
+  it("cuts the map to one rectangle that holds every landmark, dense right up to its straight edges", () => {
+    const R = MAP_RECT;
+    expect(R.x1 - R.x0).toBeGreaterThan(0);
     expect(edgeKeep(1250, -620)).toBe(1); // centre
-    expect(edgeKeep(CITY_BOUNDS.x0 + 5, -620)).toBe(0); // right at the frame
-    // the fade line wiggles: along one side the kept share varies
-    const along = Array.from({ length: 40 }, (_, i) => edgeKeep(CITY_BOUNDS.x0 + 200, CITY_BOUNDS.z0 + 200 + i * 80));
-    expect(Math.max(...along) - Math.min(...along)).toBeGreaterThan(0.3);
-    // every landmark stands where the city is whole
-    for (const l of LANDMARKS) expect(edgeKeep(...project(l.lat, l.lon))).toBeGreaterThan(0.8);
+    // dense close to each of the four edges (from ~40 m in), nothing at or beyond them
+    for (const [x, z] of [[R.x0 + 60, -500], [R.x1 - 60, -1800], [1000, R.z0 + 60], [500, R.z1 - 60]] as [number, number][]) expect(edgeKeep(x, z)).toBeGreaterThan(0.9);
+    for (const [x, z] of [[R.x0 - 5, -500], [R.x1 + 5, -1800], [1000, R.z0 - 5], [500, R.z1 + 5], [R.x0 + 5, 0]] as [number, number][]) expect(edgeKeep(x, z)).toBe(0);
+    // every landmark stands well inside the rectangle (>= 250 m from any edge)
+    for (const l of LANDMARKS) {
+      const [x, z] = project(l.lat, l.lon);
+      expect(edgeKeep(x, z)).toBeGreaterThan(0.8);
+      expect(Math.min(x - R.x0, R.x1 - x, z - R.z0, R.z1 - z), l.id).toBeGreaterThan(250);
+    }
+  });
+
+  it("ends every ground layer and every building on the rectangle", () => {
+    const R = MAP_RECT;
+    const check = (g: BufferGeometry, pad: number) => {
+      const p = g.getAttribute("position");
+      for (let i = 0; i < p.count; i += 3) {
+        expect(p.getX(i)).toBeGreaterThanOrEqual(R.x0 - pad);
+        expect(p.getX(i)).toBeLessThanOrEqual(R.x1 + pad);
+        expect(p.getZ(i)).toBeGreaterThanOrEqual(R.z0 - pad);
+        expect(p.getZ(i)).toBeLessThanOrEqual(R.z1 + pad);
+      }
+    };
+    for (const k of ["roads", "walks", "markings", "water", "banks", "green"] as const) check(built.ground[k], 0.01);
+    // no building overhangs the edge (1 m for eaves and parapets)
+    for (const g of Object.values(built.buckets)) check(g, 1);
+    for (const t of built.trees) expect(t.x > R.x0 && t.x < R.x1 && t.z > R.z0 && t.z < R.z1).toBe(true);
   });
 
   it("does not trace the frame as a riverbank", () => {

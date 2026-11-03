@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { CityBuild, Exclusion } from "./buildCity";
 import { unpack, type CityPayload } from "./serialize";
 import type { CityData, P2 } from "./types";
@@ -12,6 +12,26 @@ import type { CityData, P2 } from "./types";
  * unmount; it is only freed when replaced by a build at another quality level.
  */
 const cache = new Map<string, CityBuild>();
+
+/**
+ * Loading progress of the map (0..1) for the loading bar: downloading the city
+ * data is the first 40 %, building it in the worker the rest.
+ */
+const DOWNLOAD = 0.4;
+const progress = { value: 0, listeners: new Set<() => void>() };
+function setProgress(v: number) {
+  // never goes backwards (a retry restarts from the reset below)
+  if (v <= progress.value && v !== 0) return;
+  progress.value = Math.min(1, v);
+  progress.listeners.forEach((l) => l());
+}
+export function useLoadProgress() {
+  return useSyncExternalStore(
+    (l) => (progress.listeners.add(l), () => void progress.listeners.delete(l)),
+    () => progress.value,
+    () => 0,
+  );
+}
 const pending = new Map<string, Promise<CityBuild>>();
 
 function disposeBuild(c: CityBuild) {
@@ -22,10 +42,16 @@ function disposeBuild(c: CityBuild) {
 function build(data: CityData, exclusions: Exclusion[], zones: P2[][], quality: "low" | "medium" | "high"): Promise<CityBuild> {
   return new Promise((resolve) => {
     const fallback = () =>
-      void import("./buildCity").then(({ buildCity }) => resolve(buildCity(data, exclusions, zones, quality)));
+      void import("./buildCity").then(({ buildCity }) => {
+        const c = buildCity(data, exclusions, zones, quality);
+        setProgress(1);
+        resolve(c);
+      });
     try {
       const worker = new Worker(new URL("./city.worker.ts", import.meta.url), { type: "module" });
-      worker.onmessage = (e: MessageEvent<CityPayload>) => {
+      worker.onmessage = (e: MessageEvent<CityPayload | { progress: number }>) => {
+        if ("progress" in e.data) return setProgress(DOWNLOAD + (1 - DOWNLOAD) * 0.95 * e.data.progress);
+        setProgress(1);
         resolve(unpack(e.data));
         worker.terminate();
       };
@@ -48,6 +74,7 @@ export function useCityBuild(data: CityData, exclusions: Exclusion[], zones: P2[
     let alive = true;
     const hit = cache.get(quality);
     if (hit) {
+      setProgress(1);
       // state already initialised from the cache, or quality just changed back
       queueMicrotask(() => alive && setCity(hit));
       return () => void (alive = false);
@@ -74,14 +101,38 @@ export function useCityBuild(data: CityData, exclusions: Exclusion[], zones: P2[
 let cityData: Promise<CityData> | null = null;
 export function loadCityData(): Promise<CityData> {
   if (!cityData) {
+    setProgress(0);
     cityData = fetch("/data/city.json")
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((r) => (r.ok ? readWithProgress(r) : Promise.reject(new Error(String(r.status)))))
       .catch((e) => {
         cityData = null; // allow a retry
         throw e;
       });
   }
   return cityData;
+}
+
+/** Reads a JSON response, reporting the downloaded share as the first part of the progress. */
+async function readWithProgress(r: Response): Promise<CityData> {
+  const reader = r.body?.getReader();
+  if (!reader) return r.json();
+  // content-length is the compressed size when the server gzips: then use the known raw size
+  const len = Number(r.headers.get("content-length")) || 0;
+  const total = r.headers.get("content-encoding") || !len ? 1_060_000 : len;
+  const chunks: Uint8Array[] = [];
+  let got = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    got += value.length;
+    setProgress(DOWNLOAD * Math.min(0.99, got / total));
+  }
+  const all = new Uint8Array(got);
+  let o = 0;
+  for (const c of chunks) { all.set(c, o); o += c.length; }
+  setProgress(DOWNLOAD);
+  return JSON.parse(new TextDecoder().decode(all)) as CityData;
 }
 
 /** Set when the map hands over to the palace tour; read once when the map comes back. */

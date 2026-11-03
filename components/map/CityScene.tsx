@@ -1,14 +1,13 @@
 "use client";
 
-import { CameraControls } from "@react-three/drei";
+import { CameraControls, Line } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { CONTEXT_BUILDINGS, LANDMARKS, project } from "@/data/landmarks";
-import { CITY_BOUNDS, pointInPolygon, type CityBuild, type Tree } from "@/lib/city/buildCity";
+import { CITY_BOUNDS, pointInPolygon, REGION_OUTLINE, type CityBuild, type Tree } from "@/lib/city/buildCity";
 import { mapView, useCityBuild } from "@/lib/city/useCityBuild";
 import { footprintFrame, type Frame } from "@/lib/city/footprint";
-import { loadOutskirtsData, type OutskirtsData } from "@/lib/city/outskirts";
 import type { CityData, P2 } from "@/lib/city/types";
 import { GROUNDS } from "@/data/dinh/layout";
 import { rng } from "@/lib/geo";
@@ -17,8 +16,10 @@ import {
   BaSonBridge, Cathedral, CityHall, Landmark81, Market, Museum, PalaceMini, PostOffice, Theatre, Tower, Wharf, ZooGate,
 } from "./LandmarkModels";
 import { LivingCity } from "./LivingCity";
-import { OutskirtsLayer } from "./OutskirtsLayer";
-import { CityBuildings, CityGround, CitySun, CityTrees } from "./CityLayers";
+import { Sky } from "./Sky";
+import { setLandmarkNight } from "./landmarkTextures";
+import { waterUniforms } from "@/lib/city/waterMaterial";
+import { CityBuildings, CityGround, CitySun, CityTrees, StreetLights } from "./CityLayers";
 
 export interface CitySceneHandle {
   reset: (smooth?: boolean) => void;
@@ -27,8 +28,9 @@ export interface CitySceneHandle {
 }
 
 /** Initial view: the whole central map (palace to Landmark 81), seen from the south-west. */
-const CENTER = { x: 1250, z: -620 };
-const HOME = { pos: [CENTER.x - 1550, 2350, CENTER.z + 2750] as const, target: [CENTER.x, 0, CENTER.z] as const };
+const CENTER = { x: 1250, z: -640 };
+// framed so the diorama fills most of the screen (little sky around it) while all ten places stay in view
+const HOME = { pos: [CENTER.x - 1550 * 0.9, 2350 * 0.98, CENTER.z + 2750 * 0.9] as const, target: [CENTER.x, 0, CENTER.z] as const };
 
 /**
  * Palace orientation in the city: its front faces Nam Kỳ Khởi Nghĩa (north-east).
@@ -66,7 +68,7 @@ export const CityScene = forwardRef<CitySceneHandle, Props>(function CityScene(p
       onCreated={({ gl }) => {
         // Neutral keeps the saturated "miniature city" palette (ACES washes it out).
         gl.toneMapping = THREE.NeutralToneMapping;
-        gl.toneMappingExposure = 1.05;
+        gl.toneMappingExposure = 1.12;
       }}
     >
       <CityContent {...props} handleRef={ref} />
@@ -75,6 +77,12 @@ export const CityScene = forwardRef<CitySceneHandle, Props>(function CityScene(p
 });
 
 type Anchor = { x: number; z: number; frame: Frame | null };
+
+/** Dev-only handles for the headless QA scripts (window.__sg3dMap). */
+function devHook(add: Record<string, unknown>) {
+  const w = window as unknown as { __sg3dMap?: Record<string, unknown> };
+  w.__sg3dMap = Object.assign(w.__sg3dMap ?? {}, add);
+}
 
 /** The Ba Son bridge line (OSM) and its pylon: the first point on dry land east of the river. */
 function baSonGeometry(data: CityData) {
@@ -102,15 +110,7 @@ function CityContent({
   data, dark, quality, reducedMotion, markerEls, onReady, handleRef,
 }: Props & { handleRef: React.ForwardedRef<CitySceneHandle> }) {
   const controls = useRef<CameraControls>(null);
-  const { scene, camera } = useThree();
-
-  // the open ring around the city (roads, water, thinning houses); optional
-  const [outskirts, setOutskirts] = useState<OutskirtsData | null>(null);
-  useEffect(() => {
-    let alive = true;
-    loadOutskirtsData().then((d) => alive && setOutskirts(d)).catch((e) => console.warn("[map] outskirts unavailable", e));
-    return () => void (alive = false);
-  }, []);
+  const { scene, camera, gl } = useThree();
 
   const landmarkPos = useMemo(() => {
     const m = new Map<string, Anchor>();
@@ -213,7 +213,7 @@ function CityContent({
     if (!c) return;
     c.setBoundary(new THREE.Box3(new THREE.Vector3(CITY_BOUNDS.x0, 0, CITY_BOUNDS.z0), new THREE.Vector3(CITY_BOUNDS.x1, 400, CITY_BOUNDS.z1)));
     c.boundaryEnclosesCamera = false;
-    if (process.env.NODE_ENV !== "production") (window as unknown as Record<string, unknown>).__sg3dMap = { controls: c };
+    if (process.env.NODE_ENV !== "production") devHook({ controls: c, gl, scene });
     if (mapView.returningFromTour) {
       // Coming back from the palace: start at the gate where we dived in, then pull back.
       mapView.returningFromTour = false;
@@ -228,16 +228,20 @@ function CityContent({
   }, []);
 
   // Fog and the clip planes follow the zoom: the whole city from above, street level stays crisp.
-  const fog = useMemo(() => new THREE.Fog("#cfe8f5", 2600, 7500), []);
+  // fog takes the colour of the sky's horizon (warm morning haze / violet night)
+  const fog = useMemo(() => new THREE.Fog("#f1e6d4", 2600, 7500), []);
   useEffect(() => {
-    fog.color.set(dark ? "#1a2233" : "#cfe8f5");
+    fog.color.set(dark ? "#2a2342" : "#f1e6d4");
     scene.fog = fog;
+    setLandmarkNight(dark);
+    // the river reflects a warm violet night sky (city glow) rather than cold blue
+    waterUniforms.uSky.value.set(dark ? "#5b4a7a" : "#d8ecf0");
   }, [dark, scene, fog]);
   const lifeGroup = useRef<THREE.Group>(null);
   useFrame(() => {
     const d = controls.current?.distance ?? 2000;
-    fog.near = Math.max(2600, d * 1.1);
-    fog.far = Math.max(7500, d * 3.2);
+    fog.near = Math.max(3000, d * 1.5);
+    fog.far = Math.max(9000, d * 4);
     const pc = camera as THREE.PerspectiveCamera;
     const far = Math.max(12000, d * 4), near = Math.max(2, d * 0.002);
     if (Math.abs(pc.far - far) > far * 0.1 || Math.abs(pc.near - near) > near * 0.25) {
@@ -292,24 +296,26 @@ function CityContent({
         ref={controls}
         makeDefault
         minDistance={60}
-        maxDistance={5200}
+        maxDistance={3700}
         maxPolarAngle={Math.PI * 0.44}
         minPolarAngle={0.15}
         dollySpeed={0.6}
         smoothTime={reducedMotion ? 0.05 : 0.6}
       />
-      <color attach="background" args={[dark ? "#141c2b" : "#bfe3f6"]} />
-      <hemisphereLight args={[dark ? "#3a4a6e" : "#ffffff", dark ? "#1a1a14" : "#c9b48a", dark ? 0.55 : 1.35]} />
-      <ambientLight intensity={dark ? 0.25 : 0.4} />
+      <color attach="background" args={[dark ? "#1a1a33" : "#f1e6d4"]} />
+      <Sky dark={dark} />
+      {/* night: blue sky light from above, warm bounce from the lit streets below */}
+      <hemisphereLight args={[dark ? "#7f86c0" : "#fff2df", dark ? "#7a5236" : "#c9b48a", dark ? 0.9 : 1.2]} />
+      <ambientLight intensity={dark ? 0.3 : 0.28} color={dark ? "#ffd9b5" : "#ffffff"} />
       <CitySun dark={dark} shadows={shadows} quality={quality} controls={controls} />
 
       <MapBase dark={dark} shadows={shadows} />
-      {outskirts && <OutskirtsLayer data={outskirts} quality={quality} dark={dark} shadows={shadows} />}
       {city && (
         <>
           <CityGround city={city} dark={dark} shadows={shadows} />
-          <CityBuildings city={city} dark={dark} shadows={shadows} controls={controls} />
+          <CityBuildings city={city} dark={dark} shadows={shadows} />
           <CityTrees trees={allTrees} dark={dark} shadows={shadows} />
+          <StreetLights city={city} dark={dark} />
         </>
       )}
       <group ref={lifeGroup}>
@@ -323,56 +329,122 @@ function CityContent({
         const f = p.frame ?? { x: p.x, z: p.z, angle: 0, length: 40, width: 30 };
         return c.kind === "theatre" ? <Theatre key={c.id} f={f} /> : <CityHall key={c.id} f={f} />;
       })}
+      <MarkerStems positions={landmarkPos} dark={dark} />
       <MarkerProjector positions={landmarkPos} els={markerEls} controls={controls} />
     </>
   );
 }
 
 /**
- * Ground of the map: the mapped city sits in a wide plain (3 km margin on
- * every side) crossed by the real roads and river, the space later districts
- * can be added to.
+ * The map base: the ground covers exactly the cut region (REGION_OUTLINE) and
+ * stands on a plinth with an ink rim that follows the same outline, like a
+ * city model cut out for display. The plinth is decoration, not terrain.
  */
 function MapBase({ dark, shadows }: { dark: boolean; shadows: boolean }) {
-  const M = 3000;
+  const geo = useMemo(() => {
+    const shape = new THREE.Shape(REGION_OUTLINE.map(([x, z]) => new THREE.Vector2(x, -z)));
+    const top = new THREE.ShapeGeometry(shape);
+    top.rotateX(-Math.PI / 2); // shape (x, -z) -> world (x, 0, z)
+    // side walls along the outline: rim 0..-6 m, body -6..-86 m
+    const wall = (y0: number, y1: number) => {
+      const pos: number[] = [];
+      for (let i = 0; i < REGION_OUTLINE.length; i++) {
+        const a = REGION_OUTLINE[i], b = REGION_OUTLINE[(i + 1) % REGION_OUTLINE.length];
+        pos.push(a[0], y0, a[1], b[0], y0, b[1], b[0], y1, b[1], a[0], y0, a[1], b[0], y1, b[1], a[0], y1, a[1]);
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      g.computeVertexNormals();
+      return g;
+    };
+    return { top, rim: wall(0, -6), body: wall(-6, -86) };
+  }, []);
+  useEffect(() => () => Object.values(geo).forEach((g) => g.dispose()), [geo]);
+  const mats = useMemo(() => {
+    const side = (c: string) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.9, side: THREE.DoubleSide });
+    return { rim: side("#2b241d"), body: side("#c9a77c") };
+  }, []);
+  useEffect(() => {
+    mats.body.color.set(dark ? "#b08a66" : "#c9a77c");
+    mats.rim.color.set(dark ? "#e9dcc2" : "#2b241d");
+  }, [dark, mats]);
+  useEffect(() => () => Object.values(mats).forEach((m) => m.dispose()), [mats]);
   return (
-    // First of the flat layers and writes no depth: rivers and roads are drawn
-    // over it by render order, never by a depth test a few cm apart (that
-    // shimmered when the camera turned).
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[(CITY_BOUNDS.x0 + CITY_BOUNDS.x1) / 2, -0.05, (CITY_BOUNDS.z0 + CITY_BOUNDS.z1) / 2]} renderOrder={-10} receiveShadow={shadows}>
-      <planeGeometry args={[CITY_BOUNDS.x1 - CITY_BOUNDS.x0 + M * 2, CITY_BOUNDS.z1 - CITY_BOUNDS.z0 + M * 2]} />
-      <meshStandardMaterial color={dark ? "#2b302c" : "#ebe3cf"} roughness={1} depthWrite={false} />
-    </mesh>
+    <group>
+      {/* First of the flat layers and writes no depth: rivers and roads are drawn
+          over it by render order, never by a depth test a few cm apart (that
+          shimmered when the camera turned). */}
+      <mesh geometry={geo.top} position={[0, -0.05, 0]} renderOrder={-10} receiveShadow={shadows}>
+        <meshStandardMaterial color={dark ? "#4a4e4a" : "#e8d8b1"} roughness={1} depthWrite={false} side={THREE.DoubleSide} />
+      </mesh>
+      <mesh geometry={geo.rim} material={mats.rim} />
+      <mesh geometry={geo.body} material={mats.body} />
+    </group>
   );
 }
 
-/** Height (m) of each marker's anchor above the ground: just over the model. */
+/** Height (m) of the top of each landmark's model: the marker stem rises from here. */
 export const MARKER_H: Record<LandmarkKind, number> = {
   palace: 48, cathedral: 70, postoffice: 34, museum: 26, wharf: 30, market: 40,
   landmark81: 475, tower: 285, zoo: 30, bridge: 125,
 };
+/** Length (m) of the stem above the model; the label sits on its top. */
+export const STEM = 70;
+
+/** World anchors of a marker: the foot on the ground at the place, the top of the stem where the label sits. */
+export function markerAnchor(a: Anchor, kind: LandmarkKind) {
+  const at = a.frame ?? a;
+  // the two skyscrapers already rise above everything: a short stem keeps their labels in frame
+  const stem = kind === "landmark81" || kind === "tower" ? 25 : STEM;
+  return { foot: new THREE.Vector3(at.x, 0, at.z), top: new THREE.Vector3(at.x, MARKER_H[kind] + stem, at.z) };
+}
+
+/**
+ * The marker stems: real geometry fixed in the world (one draw call), from the
+ * ground at the place up through the model to the label. Constant pixel width
+ * so they stay readable at every zoom; the model hides the part inside it.
+ */
+function MarkerStems({ positions, dark }: { positions: Map<string, Anchor>; dark: boolean }) {
+  const points = useMemo(() => LANDMARKS.flatMap((l) => {
+    const { foot, top } = markerAnchor(positions.get(l.id)!, l.kind);
+    return [foot, top];
+  }), [positions]);
+  return <Line points={points} segments lineWidth={3} color={dark ? "#f3e6cc" : "#2b241d"} renderOrder={30} />;
+}
 
 /** Display level of a label: full name + status, short name, or just the pin. */
 export type LabelMode = "full" | "short" | "dot";
 
 /**
- * Projects landmark anchors to screen space and moves the DOM labels without a
- * React re-render. The level of detail follows the zoom; labels are placed in
- * priority order (selected, the open palace, then nearest) and a label that
- * would overlap one already placed is lifted, then shortened, then reduced to a pin.
+ * Billboard labels. Each label is a DOM element whose bottom-centre is pinned,
+ * every frame, to the projected top of its stem: it always faces the viewer and
+ * never leaves the stem. Projection runs after the camera controls have moved
+ * the camera (default priority 0, after their -1; a positive priority would
+ * switch off R3F's own rendering) with a freshly updated view matrix, so
+ * label and 3D stem are always from the same frame; there is no smoothing,
+ * CSS transition or per-label offset that could make a label lag or wander.
+ *
+ * Overlaps are resolved only by the level of detail (full → short name → pin),
+ * never by moving a label, and a new level must be wanted for several frames
+ * before it is shown, so labels don't flicker while the camera turns.
  */
 function MarkerProjector({ positions, els, controls }: { positions: Map<string, Anchor>; els: React.RefObject<Map<string, HTMLElement>>; controls: React.RefObject<CameraControls | null> }) {
   const v = useMemo(() => new THREE.Vector3(), []);
   const { camera, size } = useThree();
-  const items = useMemo(() => LANDMARKS.map((l) => ({ l, x: 0, y: 0, d: 0, vis: false })), []);
+  const items = useMemo(
+    () => LANDMARKS.map((l) => ({ l, top: markerAnchor(positions.get(l.id)!, l.kind).top, x: 0, y: 0, d: 0, vis: false, mode: "full" as LabelMode, want: "full" as LabelMode, wantFor: 0 })),
+    [positions],
+  );
+  useEffect(() => {
+    // dev hook for the label-stability check (anchors + current state)
+    if (process.env.NODE_ENV !== "production") devHook({ markers: items, camera });
+  }, [items, camera]);
   useFrame(() => {
+    camera.updateMatrixWorld();
     const zoom = controls.current?.distance ?? 2000;
     const base: LabelMode = zoom > 9000 ? "dot" : zoom > 2600 ? "short" : "full";
     for (const it of items) {
-      const p = positions.get(it.l.id);
-      if (!p) continue;
-      const at = p.frame ?? p;
-      v.set(at.x, MARKER_H[it.l.kind], at.z);
+      v.copy(it.top);
       it.d = camera.position.distanceTo(v);
       v.project(camera);
       it.vis = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
@@ -396,25 +468,22 @@ function MarkerProjector({ positions, els, controls }: { positions: Map<string, 
       // the palace and the selected place always keep at least their short name
       const first: LabelMode = selected ? "full" : base === "dot" && it.l.status === "available" ? "short" : base;
       const tries: LabelMode[] = first === "full" ? ["full", "short", "dot"] : first === "short" ? ["short", "dot"] : ["dot"];
-      let mode: LabelMode = "dot", lift = 0;
-      search: for (const m of tries) {
+      const rect = (m: LabelMode): [number, number, number, number] => {
         // label text lengths are provided by the DOM (they depend on the language)
         const chars = Number(m === "full" ? el.dataset.fullLen : el.dataset.shortLen) || 12;
         const w = m === "dot" ? 26 : chars * 7 + (m === "full" && it.l.status !== "available" ? 110 : 44);
-        const h = m === "dot" ? 26 : 28;
-        for (const up of m === "dot" ? [0] : [0, 30, 60]) {
-          const r: [number, number, number, number] = [it.x - w / 2, it.y - 20 - up - h, it.x + w / 2, it.y - 20 - up];
-          if (!hit(r) || m === "dot") {
-            placed.push(r);
-            mode = m;
-            lift = up;
-            break search;
-          }
-        }
-      }
-      if (el.dataset.mode !== mode) el.dataset.mode = mode;
-      el.style.setProperty("--lift", `${lift}px`);
-      el.style.transform = `translate(-50%, -100%) translate(${it.x.toFixed(1)}px, ${it.y.toFixed(1)}px)`;
+        const h = m === "dot" ? 26 : 30;
+        return [it.x - w / 2, it.y - h, it.x + w / 2, it.y];
+      };
+      const want = tries.find((m) => m === "dot" || !hit(rect(m)))!;
+      // hysteresis: switch level only after the new one has been wanted for 8 frames
+      if (want === it.mode) it.wantFor = 0;
+      else if (want === it.want) it.wantFor++;
+      else { it.want = want; it.wantFor = 1; }
+      if (it.wantFor >= 8 || selected) { it.mode = want; it.wantFor = 0; }
+      placed.push(rect(it.mode));
+      if (el.dataset.mode !== it.mode) el.dataset.mode = it.mode;
+      el.style.transform = `translate3d(${it.x.toFixed(2)}px, ${it.y.toFixed(2)}px, 0) translate(-50%, -100%)`;
       el.style.zIndex = String(selected ? 20000 : Math.max(1, Math.round(15000 - it.d / 10)));
     }
   });

@@ -41,7 +41,10 @@ function rider(trim: MeshBuf, paint: MeshBuf, z: number, seatY: number, helmet: 
 }
 
 /* ---------------------------------------------------------------- road */
-export type VehicleKind = "motorbike" | "scooter" | "car" | "taxi" | "bus" | "van" | "truck" | "bicycle";
+export type VehicleKind =
+  | "motorbike" | "scooter" | "delivery" | "pillion" | "ebike" | "bicycle"
+  | "car" | "hatchback" | "suv" | "pickup" | "ev" | "taxi"
+  | "bus" | "minibus" | "van" | "minitruck" | "truck";
 
 export function vehicleModels(): Record<VehicleKind, Model> {
   const out = {} as Record<VehicleKind, Model>;
@@ -129,6 +132,109 @@ export function vehicleModels(): Record<VehicleKind, Model> {
     rider(t, p, -0.15, 0.82, C("#f2b630"));
     out.bicycle = finish(p, t, [[0, 0.33, 0.5, 0.33, 0.05], [0, 0.33, -0.5, 0.33, 0.05]], 1.7);
   }
+  {
+    // delivery bike: underbone motorbike with a big insulated box behind the rider
+    const p = newBuf(), t = newBuf();
+    box(p, [0, 0.55, 0.05], [0.32, 0.32, 1.3], 0, WHITE);
+    box(p, [0, 0.62, 0.62], [0.36, 0.42, 0.22], 0, WHITE, 0.25);
+    box(t, [0, 0.72, -0.1], [0.34, 0.1, 0.5], 0, DARK);
+    box(t, [0, 0.95, 0.66], [0.62, 0.05, 0.05], 0, CHROME);
+    box(t, [0, 0.66, 0.74], [0.16, 0.12, 0.04], 0, LIGHT);
+    box(t, [0, 0.62, -0.88], [0.18, 0.1, 0.04], 0, TAIL);
+    box(t, [0, 1.15, -0.62], [0.56, 0.52, 0.5], 0, C("#2fae66")); // cargo box (plain green, no branding)
+    box(t, [0, 1.42, -0.62], [0.58, 0.04, 0.52], 0, C("#e9f5ec"));
+    rider(t, p, 0.02, 0.72, C("#2fae66"));
+    out.delivery = finish(p, t, [[0, 0.3, 0.68, 0.3, 0.1], [0, 0.3, -0.62, 0.3, 0.12]], 2.0);
+  }
+  {
+    // motorbike carrying two people
+    const p = newBuf(), t = newBuf();
+    box(p, [0, 0.55, 0.05], [0.32, 0.32, 1.3], 0, WHITE);
+    box(p, [0, 0.62, 0.62], [0.36, 0.42, 0.22], 0, WHITE, 0.25);
+    box(t, [0, 0.72, -0.2], [0.34, 0.1, 0.8], 0, DARK);
+    box(t, [0, 0.95, 0.66], [0.62, 0.05, 0.05], 0, CHROME);
+    box(t, [0, 0.66, 0.74], [0.16, 0.12, 0.04], 0, LIGHT);
+    box(t, [0, 0.62, -0.84], [0.18, 0.1, 0.04], 0, TAIL);
+    rider(t, p, 0.05, 0.72, C("#1d3557"));
+    rider(t, p, -0.48, 0.76, C("#f4acb7"));
+    out.pillion = finish(p, t, [[0, 0.3, 0.68, 0.3, 0.1], [0, 0.3, -0.62, 0.3, 0.12]], 1.95);
+  }
+  {
+    // electric scooter: one rounded body, no tank, small wheels, LED bar
+    const p = newBuf(), t = newBuf();
+    box(p, [0, 0.45, -0.25], [0.42, 0.36, 0.95], 0, WHITE);
+    box(p, [0, 0.58, -0.3], [0.38, 0.2, 0.7], 0, WHITE, 0.12);
+    box(p, [0, 0.65, 0.55], [0.36, 0.95, 0.16], 0, WHITE, -0.25);
+    box(p, [0, 0.22, 0.18], [0.32, 0.06, 0.55], 0, WHITE);
+    box(t, [0, 0.7, -0.28], [0.34, 0.08, 0.6], 0, DARK);
+    box(t, [0, 1.12, 0.6], [0.58, 0.05, 0.05], 0, DARK);
+    box(t, [0, 0.95, 0.66], [0.3, 0.06, 0.04], 0, LIGHT);
+    box(t, [0, 0.5, -0.74], [0.3, 0.05, 0.03], 0, TAIL);
+    rider(t, p, -0.22, 0.7, C("#90be6d"));
+    out.ebike = finish(p, t, [[0, 0.22, 0.66, 0.22, 0.13], [0, 0.22, -0.6, 0.22, 0.15]], 1.75);
+  }
+  {
+    // hatchback: the cabin runs on to a cut-off tail
+    const c = car(3.8, 1.7, 2.1, 1.48);
+    box(c.p, [0, 1.12, -0.95], [1.46, 0.5, 0.9], 0, WHITE, -0.25);
+    out.hatchback = finish(c.p, c.t, c.wheels, 3.8);
+  }
+  {
+    const c = car(4.7, 1.9, 2.8, 1.8);
+    box(c.t, [0, 1.86, -0.2], [1.5, 0.06, 2.4], 0, DARK); // roof rails
+    box(c.t, [0, 0.42, 2.36], [1.7, 0.2, 0.06], 0, DARK); // bumper guard
+    for (const s of [1, -1]) box(c.t, [s * 1.0, 1.15, 0.95], [0.12, 0.1, 0.18], 0, DARK); // mirrors
+    out.suv = finish(c.p, c.t, c.wheels.map(([x, , z, , w]) => [x, 0.38, z, 0.38, w]) as Model["wheels"], 4.7);
+  }
+  {
+    // pickup: cab forward, open bed behind
+    const p = newBuf(), t = newBuf();
+    box(p, [0, 0.6, 0], [1.85, 0.65, 5.2], 0, WHITE);
+    box(p, [0, 1.3, 0.75], [1.65, 0.8, 1.9], 0, WHITE);
+    box(t, [0, 1.35, 1.71], [1.5, 0.5, 0.04], 0, GLASS, 0.3);
+    for (const s of [1, -1]) box(t, [s * 0.83, 1.35, 0.75], [0.03, 0.45, 1.5], 0, GLASS);
+    box(t, [0, 0.95, -1.4], [1.6, 0.06, 2.2], 0, DARK);
+    for (const s of [1, -1]) box(t, [s * 0.92, 1.05, -1.4], [0.06, 0.3, 2.3], 0, CHROME);
+    for (const s of [1, -1]) {
+      box(t, [s * 0.6, 0.7, 2.61], [0.3, 0.14, 0.04], 0, LIGHT);
+      box(t, [s * 0.75, 0.75, -2.61], [0.2, 0.18, 0.04], 0, TAIL);
+    }
+    const r = 0.38;
+    out.pickup = finish(p, t, [[0.85, r, 1.7, r, 0.24], [-0.85, r, 1.7, r, 0.24], [0.85, r, -1.6, r, 0.24], [-0.85, r, -1.6, r, 0.24]], 5.2);
+  }
+  {
+    // electric car: glass roof and light bars instead of a grille
+    const c = car(4.4, 1.85, 2.6, 1.45);
+    box(c.t, [0, 1.47, -0.15], [1.4, 0.04, 2.3], 0, GLASS);
+    box(c.t, [0, 0.72, 2.21], [1.5, 0.06, 0.04], 0, LIGHT);
+    box(c.t, [0, 0.78, -2.21], [1.5, 0.06, 0.04], 0, TAIL);
+    out.ev = finish(c.p, c.t, c.wheels, 4.4);
+  }
+  {
+    // 16-seat minibus / shuttle
+    const p = newBuf(), t = newBuf();
+    box(p, [0, 1.3, 0], [2.0, 2.1, 6.6], 0, WHITE);
+    box(p, [0, 0.65, 3.1], [1.95, 0.8, 0.6], 0, WHITE);
+    box(t, [0, 1.75, 0], [2.04, 0.7, 5.6], 0, GLASS);
+    box(t, [0, 1.75, 3.31], [1.8, 0.8, 0.04], 0, GLASS, 0.2);
+    for (const s of [1, -1]) {
+      box(t, [s * 0.7, 0.75, 3.41], [0.28, 0.14, 0.04], 0, LIGHT);
+      box(t, [s * 0.8, 0.8, -3.31], [0.2, 0.2, 0.04], 0, TAIL);
+    }
+    const r = 0.38;
+    out.minibus = finish(p, t, [[0.9, r, 2.3, r, 0.24], [-0.9, r, 2.3, r, 0.24], [0.9, r, -2.2, r, 0.24], [-0.9, r, -2.2, r, 0.24]], 6.6);
+  }
+  {
+    // small truck (1-2 t): short cab + tarp-covered bed
+    const p = newBuf(), t = newBuf();
+    box(p, [0, 1.25, 2.0], [1.8, 1.7, 1.5], 0, WHITE);
+    box(t, [0, 1.65, 2.76], [1.6, 0.65, 0.04], 0, GLASS, 0.1);
+    box(t, [0, 0.62, -0.2], [1.0, 0.2, 5.4], 0, DARK);
+    box(t, [0, 1.4, -0.75], [1.9, 1.5, 3.4], 0, C("#3f7d6e"));
+    for (const s of [1, -1]) box(t, [s * 0.6, 0.75, 2.76], [0.28, 0.14, 0.04], 0, LIGHT);
+    const r = 0.4;
+    out.minitruck = finish(p, t, [[0.8, r, 2.0, r, 0.24], [-0.8, r, 2.0, r, 0.24], [0.8, r, -1.6, r, 0.28], [-0.8, r, -1.6, r, 0.28]], 5.6);
+  }
   return out;
 }
 
@@ -149,7 +255,7 @@ export function wheelGeometry() {
 }
 
 /* --------------------------------------------------------------- water */
-export type BoatKind = "tour" | "ferry" | "barge" | "boat" | "speedboat";
+export type BoatKind = "tour" | "glasstour" | "ferry" | "barge" | "cargo" | "tug" | "boat" | "speedboat";
 
 function hull(p: MeshBuf, len: number, wid: number, h: number, col: THREE.Color) {
   // pointed bow: box for the body + a wedge at the front
@@ -205,6 +311,39 @@ export function boatModels(): Record<BoatKind, Model> {
     box(t, [0, 1.3, 0.6], [2, 0.45, 1.4], 0, GLASS, 0.3);
     box(t, [0, 1.0, -2.2], [2.2, 0.3, 2.6], 0, C("#f4f4f4"));
     out.speedboat = finish(p, t, [], 8);
+  }
+  {
+    // single-deck sightseeing boat: long glass cabin, open bow deck with rails
+    const p = newBuf(), t = newBuf();
+    hull(p, 20, 5, 1.3, WHITE);
+    box(t, [0, 2.2, -2], [4.4, 1.8, 12], 0, GLASS);
+    box(t, [0, 3.15, -2], [4.6, 0.12, 12.6], 0, C("#f6f4ee"));
+    for (const s of [1, -1]) box(t, [s * 2.3, 1.75, 5.5], [0.06, 0.6, 3.5], 0, CHROME);
+    box(t, [0, 1.75, 7.2], [3.2, 0.6, 0.06], 0, CHROME);
+    box(t, [0, 3.35, -6.5], [1.2, 0.3, 0.6], 0, LIGHT);
+    out.glasstour = finish(p, t, [], 20);
+  }
+  {
+    // small freighter: containers forward, bridge aft
+    const p = newBuf(), t = newBuf();
+    hull(p, 32, 7, 2.2, WHITE);
+    const boxes: [number, string][] = [[6, "#c1121f"], [0, "#1d4ed8"], [-6, "#e9c46a"]];
+    for (const [z, c] of boxes) box(t, [0, 3.4, z], [6, 2.4, 5.4], 0, C(c));
+    box(t, [0, 4.6, -12], [6, 4.8, 4.5], 0, C("#f2f2f2"));
+    box(t, [0, 5.6, -9.74], [5.4, 0.8, 0.05], 0, GLASS);
+    box(t, [0, 7.6, -12.5], [0.7, 1.6, 0.7], 0, DARK);
+    out.cargo = finish(p, t, [], 32);
+  }
+  {
+    // tugboat: short, tall wheelhouse, tyre fenders
+    const p = newBuf(), t = newBuf();
+    hull(p, 12, 4.2, 1.6, WHITE);
+    box(t, [0, 2.6, -0.5], [3.2, 1.6, 4.5], 0, C("#f2f2f2"));
+    box(t, [0, 4.0, 0.2], [2.4, 1.3, 2.4], 0, C("#f2f2f2"));
+    box(t, [0, 4.1, 1.42], [2.2, 0.6, 0.05], 0, GLASS);
+    box(t, [0, 5.0, -1.4], [0.6, 1.4, 0.6], 0, DARK);
+    for (const s of [1, -1]) box(t, [s * 2.15, 1.2, 0], [0.2, 0.5, 8], 0, DARK);
+    out.tug = finish(p, t, [], 12);
   }
   return out;
 }

@@ -89,7 +89,7 @@ export function NavCard() {
               </button>
             )}
             {!(mode === "guided" && d.kind === "stop" && d.id === targetStopId && status === "arrived") && (
-              <button type="button" onClick={cancelNavigation} className="rounded-lg border border-line px-2.5 py-1 text-[11.5px] font-medium hover:bg-accent-soft" aria-label={t.nav.cancel}>
+              <button type="button" onClick={cancelNavigation} className="btn-game bg-surface-solid px-2.5 py-1 text-[11.5px] font-bold hover:bg-mint" aria-label={t.nav.cancel}>
                 <Icon name="close" size={13} className="mr-1 inline" />
                 {t.nav.cancel}
               </button>
@@ -113,7 +113,7 @@ export function PointerChip({ canvas }: { canvas: React.RefObject<HTMLCanvasElem
     return <p className="panel max-w-[360px] px-3 py-1.5 text-[11.5px] text-amber" role="status">{t.pointer.error}</p>;
   }
   return locked ? (
-    <p className="rounded-full bg-black/45 px-3 py-1 text-[11.5px] text-white backdrop-blur" role="status">
+    <p className="chip bg-surface-solid px-3 py-0.5 text-[11.5px] text-fg" role="status">
       <Icon name="camera" size={12} className="mr-1 inline" />
       {t.pointer.locked} · {t.pointer.escHint}
     </p>

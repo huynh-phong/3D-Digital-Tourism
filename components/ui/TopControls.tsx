@@ -18,7 +18,7 @@ export function TopControls({ onSettings, onHelp }: { onSettings?: () => void; o
       <button
         type="button"
         onClick={() => set({ lang: lang === "vi" ? "en" : "vi" })}
-        className="inline-flex h-10 items-center gap-1 rounded-xl border border-line bg-surface-2 px-3 text-xs font-bold hover:bg-accent-soft"
+        className="btn-game inline-flex h-10 items-center gap-1 bg-surface-solid px-3 text-xs font-bold hover:bg-mint"
         aria-label={`${t.common.language}: ${lang === "vi" ? "Tiếng Việt" : "English"}`}
         title={t.common.language}
       >
@@ -26,16 +26,18 @@ export function TopControls({ onSettings, onHelp }: { onSettings?: () => void; o
         <span className="text-muted">/</span>
         <span className={lang === "en" ? "text-accent" : "text-muted"}>EN</span>
       </button>
-      <IconButton icon={themeIcon} label={themeLabel} onClick={() => set({ theme: nextTheme[theme] })} />
+      {/* theme and sound are also in Settings: hidden on phones so the cluster fits */}
+      <IconButton icon={themeIcon} label={themeLabel} className="max-sm:hidden" onClick={() => set({ theme: nextTheme[theme] })} />
       <IconButton
         icon={voiceEnabled ? "volume" : "mute"}
         label={`${t.guide.voice}: ${voiceEnabled ? t.common.on : t.common.off}`}
+        className="max-sm:hidden"
         onClick={() => {
           if (voiceEnabled) narrator?.stop();
           set({ voiceEnabled: !voiceEnabled });
         }}
       />
-      {onHelp && <IconButton icon="help" label={t.common.help} onClick={onHelp} />}
+      {onHelp && <IconButton icon="help" label={t.common.help} className="max-sm:hidden" onClick={onHelp} />}
       {onSettings && <IconButton icon="settings" label={t.common.settings} onClick={onSettings} />}
     </div>
   );

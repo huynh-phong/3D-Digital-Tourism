@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { rng } from "@/lib/geo";
 import { addBuilding, classify, newBuckets, rectish, PALETTE, type Buckets } from "./architecture";
-import { box, edgeNormal, newBuf, prepPolygon, quad, signedArea, toGeometry, triangulate } from "./geom";
+import { box, edgeNormal, newBuf, prepPolygon, quad, signedArea, toGeometry, triangulate, type MeshBuf } from "./geom";
 import { buildLanes, deckHeights, findJunctions, roadYs, type Lane } from "./roads";
 import { buildBoatLoops } from "@/lib/sim/water";
 import type { CityData, P2, RoadData } from "./types";
@@ -15,6 +15,101 @@ import type { CityData, P2, RoadData } from "./types";
 
 /** Detailed area: Districts 1 & 3 core, Thủ Thiêm edge, Thảo Cầm Viên, Ba Son and Landmark 81. */
 export const CITY_BOUNDS = { x0: -860, x1: 3400, z0: -2500, z1: 1260 };
+/**
+ * The map is shown as a diorama: the detailed city plus a narrow buffer (real
+ * roads, water and generalised houses from the outskirts data) on a base with
+ * a clean edge. Nothing is drawn outside this rectangle.
+ * The 10 landmarks span x −351…2917, z −2015…976; with the buffer every one of
+ * them is at least ~520 m from the edge.
+ */
+export const DIORAMA_PAD = 240;
+export const DIORAMA = {
+  x0: CITY_BOUNDS.x0 - DIORAMA_PAD, x1: CITY_BOUNDS.x1 + DIORAMA_PAD,
+  z0: CITY_BOUNDS.z0 - DIORAMA_PAD, z1: CITY_BOUNDS.z1 + DIORAMA_PAD,
+};
+
+/**
+ * The map is cut to one rectangle (four straight edges, square corners): the
+ * smallest box that holds the ten places with a buffer of ~260-330 m on each
+ * side (west of the War Remnants Museum, east and north of Landmark 81, south
+ * of Bitexco). Roads, water, parks, buildings, trees, lanes and every ground
+ * mesh end on this line, and nothing outside it is built.
+ * Counter-clockwise in (x, z); REGION keeps the general form (a list of convex
+ * windows) used by the clipping helpers below.
+ */
+export const MAP_RECT = { x0: -650, x1: 3250, z0: -2345, z1: 1240 };
+export const REGION_OUTLINE: P2[] = [[MAP_RECT.x0, MAP_RECT.z1], [MAP_RECT.x0, MAP_RECT.z0], [MAP_RECT.x1, MAP_RECT.z0], [MAP_RECT.x1, MAP_RECT.z1]];
+export const REGION: P2[][] = [REGION_OUTLINE];
+
+const cross2 = (a: P2, b: P2, x: number, z: number) => (b[0] - a[0]) * (z - a[1]) - (b[1] - a[1]) * (x - a[0]);
+/**
+ * How far (m) a point is inside the region (negative outside): distance to the
+ * outer outline, so the internal edge shared by the two windows doesn't count.
+ */
+export function regionDepth(x: number, z: number) {
+  let d = Infinity;
+  const o = REGION_OUTLINE;
+  for (let i = 0; i < o.length; i++) {
+    const a = o[i], b = o[(i + 1) % o.length];
+    const dx = b[0] - a[0], dz = b[1] - a[1];
+    const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz)));
+    d = Math.min(d, Math.hypot(x - a[0] - dx * t, z - a[1] - dz * t));
+  }
+  return pointInPolygon(x, z, o) ? d : -d;
+}
+export const inRegion = (x: number, z: number, margin = 0) => regionDepth(x, z) > margin;
+
+/** Clips a polygon (any shape) to one convex counter-clockwise window (Sutherland–Hodgman). */
+export function clipConvex(p: P2[], win: P2[]): P2[] {
+  let out = p;
+  for (let e = 0; e < win.length && out.length; e++) {
+    const a = win[e], b = win[(e + 1) % win.length];
+    const input = out;
+    out = [];
+    const side = (q: P2) => cross2(a, b, q[0], q[1]);
+    for (let i = 0; i < input.length; i++) {
+      const cur = input[i], prev = input[(i + input.length - 1) % input.length];
+      const sc = side(cur), sp = side(prev);
+      const cut = (): P2 => { const t = sp / (sp - sc); return [prev[0] + (cur[0] - prev[0]) * t, prev[1] + (cur[1] - prev[1]) * t]; };
+      if (sc >= 0) { if (sp < 0) out.push(cut()); out.push(cur); }
+      else if (sp >= 0) out.push(cut());
+    }
+  }
+  return out;
+}
+/** Clips a polygon to the region: one piece per window (pieces never overlap). */
+export const clipToRegion = (p: P2[]) => REGION.map((w) => clipConvex(p, w)).filter((q) => q.length > 2);
+
+/** Clips a polyline to the region (Cyrus–Beck per window); a line that leaves and re-enters becomes several pieces. */
+export function clipPolylineToRegion(p: P2[]): P2[][] {
+  const pieces: P2[][] = [];
+  for (const win of REGION) {
+    let cur: P2[] = [];
+    for (let i = 0; i < p.length - 1; i++) {
+      const a = p[i], b = p[i + 1];
+      let t0 = 0, t1 = 1, ok = true;
+      for (let e = 0; e < win.length && ok; e++) {
+        const wa = win[e], wb = win[(e + 1) % win.length];
+        const fa = cross2(wa, wb, a[0], a[1]), fb = cross2(wa, wb, b[0], b[1]);
+        if (fa < 0 && fb < 0) ok = false;
+        else if (fa < 0) t0 = Math.max(t0, fa / (fa - fb));
+        else if (fb < 0) t1 = Math.min(t1, fa / (fa - fb));
+      }
+      if (!ok || t0 >= t1) { if (cur.length > 1) pieces.push(cur); cur = []; continue; }
+      const s: P2 = [a[0] + (b[0] - a[0]) * t0, a[1] + (b[1] - a[1]) * t0], e2: P2 = [a[0] + (b[0] - a[0]) * t1, a[1] + (b[1] - a[1]) * t1];
+      if (!cur.length) cur.push(s);
+      cur.push(e2);
+      if (t1 < 1) { if (cur.length > 1) pieces.push(cur); cur = []; }
+    }
+    if (cur.length > 1) pieces.push(cur);
+  }
+  return pieces;
+}
+/** Is the segment a piece of the region's own boundary (left behind by clipping)? */
+const onRegionEdge = (a: P2, b: P2) => REGION.some((w) => w.some((wa, e) => {
+  const wb = w[(e + 1) % w.length], l = Math.hypot(wb[0] - wa[0], wb[1] - wa[1]);
+  return Math.abs(cross2(wa, wb, a[0], a[1])) / l < 0.6 && Math.abs(cross2(wa, wb, b[0], b[1])) / l < 0.6;
+}));
 
 /**
  * How "central" a point is (0..1): 1 around the Nguyễn Huệ / Bến Nghé CBD and the
@@ -31,8 +126,8 @@ export function urbanity(x: number, z: number) {
 const LANDUSE_COLOR: Record<string, string> = {
   construction: "#cdb28a", brownfield: "#cdb28a", parking: "#a3a7ad", military: "#b9c39a",
   school: "#e8dcc0", university: "#e8dcc0", hospital: "#e6dfd2", industrial: "#cfc8bb", railway: "#c4bdb0",
-  cemetery: "#8fc07a", pitch: "#5fb35a", playground: "#e7c48a", grass: "#7cc85a", recreation_ground: "#7cc85a",
-  religious: "#e9dcc5", zoo: "#6cba52", theme_park: "#e8cf9a", attraction: "#e8cf9a", garden: "#7cc85a",
+  cemetery: "#9dbb82", pitch: "#7fae63", playground: "#e3c792", grass: "#94b86f", recreation_ground: "#94b86f",
+  religious: "#e9dcc5", zoo: "#86b064", theme_park: "#e3cf9e", attraction: "#e3cf9e", garden: "#94b86f",
 };
 /** Land use that must never be filled with generated buildings. */
 const NO_BUILD = new Set(["construction", "brownfield", "parking", "military", "school", "university", "hospital", "railway", "cemetery", "pitch", "playground", "grass", "recreation_ground", "religious", "zoo", "theme_park", "attraction", "garden", "park", "port", "harbour"]);
@@ -41,16 +136,19 @@ const inBounds = (p: P2, pad = 0) =>
   p[0] > CITY_BOUNDS.x0 - pad && p[0] < CITY_BOUNDS.x1 + pad && p[1] > CITY_BOUNDS.z0 - pad && p[1] < CITY_BOUNDS.z1 + pad;
 
 /**
- * How much of the city stands at a point (0..1), so its edge thins out into
- * the open ring instead of ending in a straight cut: 1 deeper than ~400 m
- * inside the frame, falling to 0 at a wavy line near the frame.
+ * How much of the city stands at a point (0..1). The buffer around the city
+ * carries the built-up area on to the diorama edge, so the city only frays a
+ * little along a wavy line at its own frame (1 deeper than ~110 m inside).
  */
-export const EDGE_FADE = 340;
+export const EDGE_FADE = 160;
 export function edgeKeep(x: number, z: number) {
+  // generated houses are placed from one reference point and reach up to ~30 m from it:
+  // keep that point 40 m inside the cut so no house overhangs the edge
+  if (regionDepth(x, z) < 40) return 0;
   const B = CITY_BOUNDS;
   const dIn = Math.min(x - B.x0, B.x1 - x, z - B.z0, B.z1 - z);
   const wave = 0.5 * Math.sin(x / 170) + 0.5 * Math.sin(z / 210 + 1.7) + 0.3 * Math.sin((x + z) / 97);
-  const t = Math.min(1, Math.max(0, (dIn + wave * 110 - 30) / EDGE_FADE));
+  const t = Math.min(1, Math.max(0, (dIn + wave * 40 + 50) / EDGE_FADE));
   return t * t * (3 - 2 * t);
 }
 /** Stable per-position random number in [0, 1) (does not disturb the build's RNG sequence). */
@@ -59,9 +157,9 @@ export function hash01(x: number, z: number) {
   return v - Math.floor(v);
 }
 
+type Rect = { x0: number; x1: number; z0: number; z1: number };
 /** Clips a polygon to the map frame (Sutherland–Hodgman). */
-export function clipPolygon(p: P2[]): P2[] {
-  const B = CITY_BOUNDS;
+export function clipPolygon(p: P2[], B: Rect = CITY_BOUNDS): P2[] {
   const edges: [(q: P2) => boolean, (a: P2, b: P2) => P2][] = [
     [(q) => q[0] >= B.x0, (a, b) => [B.x0, a[1] + ((B.x0 - a[0]) / (b[0] - a[0])) * (b[1] - a[1])]],
     [(q) => q[0] <= B.x1, (a, b) => [B.x1, a[1] + ((B.x1 - a[0]) / (b[0] - a[0])) * (b[1] - a[1])]],
@@ -85,8 +183,7 @@ export function clipPolygon(p: P2[]): P2[] {
 }
 
 /** Clips a polyline to the map frame; a line that leaves and re-enters becomes several pieces. */
-export function clipPolyline(p: P2[]): P2[][] {
-  const B = CITY_BOUNDS;
+export function clipPolyline(p: P2[], B: Rect = CITY_BOUNDS): P2[][] {
   const pieces: P2[][] = [];
   let cur: P2[] = [];
   for (let i = 0; i < p.length - 1; i++) {
@@ -117,6 +214,47 @@ const onFrame = (a: P2, b: P2) => {
   return (Math.abs(a[0] - B.x0) < e && Math.abs(b[0] - B.x0) < e) || (Math.abs(a[0] - B.x1) < e && Math.abs(b[0] - B.x1) < e) ||
     (Math.abs(a[1] - B.z0) < e && Math.abs(b[1] - B.z0) < e) || (Math.abs(a[1] - B.z1) < e && Math.abs(b[1] - B.z1) < e);
 };
+
+/** Chunk sizes (m): walls and roofs (large: few extra draw calls), and the much denser facade/street details. */
+export const CHUNK = 1800;
+export const DETAIL_CHUNK = 400;
+/**
+ * Splits a triangle soup into square chunks by triangle centroid: out[`${key}@${i},${j}`].
+ * Two passes into exactly-sized typed arrays (no intermediate number[] copies), and the
+ * source buffer is released afterwards, so peak memory stays close to the unsplit mesh.
+ */
+function splitChunks(b: MeshBuf, key: string, size: number, out: Record<string, THREE.BufferGeometry>) {
+  const n = b.pos.length / 9;
+  const cell = new Int32Array(n);
+  const index = new Map<string, number>();
+  const counts: number[] = [];
+  for (let t = 0; t < n; t++) {
+    const o = t * 9;
+    const id = `${Math.floor((b.pos[o] + b.pos[o + 3] + b.pos[o + 6]) / 3 / size)},${Math.floor((b.pos[o + 2] + b.pos[o + 5] + b.pos[o + 8]) / 3 / size)}`;
+    let c = index.get(id);
+    if (c === undefined) { c = counts.length; index.set(id, c); counts.push(0); }
+    cell[t] = c;
+    counts[c]++;
+  }
+  const parts = counts.map((c) => ({ pos: new Float32Array(c * 9), nor: new Float32Array(c * 9), col: new Float32Array(c * 9), uv: new Float32Array(c * 6), at: 0 }));
+  for (let t = 0; t < n; t++) {
+    const p = parts[cell[t]], o = t * 9, a = p.at;
+    for (let k = 0; k < 9; k++) { p.pos[a * 9 + k] = b.pos[o + k]; p.nor[a * 9 + k] = b.nor[o + k]; p.col[a * 9 + k] = b.col[o + k]; }
+    for (let k = 0; k < 6; k++) p.uv[a * 6 + k] = b.uv[t * 6 + k];
+    p.at++;
+  }
+  b.pos.length = b.nor.length = b.uv.length = b.col.length = 0;
+  for (const [id, c] of index) {
+    const p = parts[c];
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(p.pos, 3));
+    g.setAttribute("normal", new THREE.BufferAttribute(p.nor, 3));
+    g.setAttribute("uv", new THREE.BufferAttribute(p.uv, 2));
+    g.setAttribute("color", new THREE.BufferAttribute(p.col, 3));
+    g.computeBoundingSphere();
+    out[`${key}@${id}`] = g;
+  }
+}
 
 /** Shoelace area (sign depends on orientation). */
 export const polygonArea = signedArea;
@@ -219,7 +357,28 @@ function ribbon(out: Flat, pts: P2[], width: number, y: number, color: THREE.Col
   }
 }
 
-function flatGeometry(out: Flat) {
+/**
+ * Ground layer geometry. Every flat triangle is clipped to the cut region
+ * (exactly, per convex window), so roads, sidewalks, kerbs, water, parks and
+ * banks all end on the same line.
+ */
+function flatGeometry(raw: Flat) {
+  const out = newFlat();
+  for (let t = 0; t < raw.pos.length / 9; t++) {
+    const o = t * 9, y = raw.pos[o + 1];
+    const tri: P2[] = [[raw.pos[o], raw.pos[o + 2]], [raw.pos[o + 3], raw.pos[o + 5]], [raw.pos[o + 6], raw.pos[o + 8]]];
+    const r = raw.col[o], gg = raw.col[o + 1], bb = raw.col[o + 2];
+    if (tri.every((q) => regionDepth(q[0], q[1]) >= 0)) {
+      for (let k = 0; k < 9; k++) { out.pos.push(raw.pos[o + k]); out.col.push(raw.col[o + k]); }
+      continue;
+    }
+    for (const win of REGION) {
+      const piece = clipConvex(tri, win);
+      for (let k = 1; k + 1 < piece.length; k++) {
+        for (const q of [piece[0], piece[k], piece[k + 1]]) { out.pos.push(q[0], y, q[1]); out.col.push(r, gg, bb); }
+      }
+    }
+  }
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute(out.pos, 3));
   g.setAttribute("color", new THREE.Float32BufferAttribute(out.col, 3));
@@ -263,7 +422,8 @@ export type { Lane } from "./roads";
 export { sampleLane } from "./roads";
 
 /* ------------------------------------------------------------- output */
-export type TreeKind = 0 | 1 | 2; // round canopy · tall (dầu/sao) · small ornamental
+/** round clustered canopy · tall (dầu/sao) · small ornamental/bush · conical · layered (tầng) · broad umbrella (me, phượng) */
+export type TreeKind = 0 | 1 | 2 | 3 | 4 | 5;
 export interface Tree { x: number; z: number; s: number; k: TreeKind }
 
 export interface CityBuild {
@@ -288,7 +448,8 @@ export interface CityBuild {
 
 export interface Exclusion { x: number; z: number; r: number; /** model height, for the skyline */ h?: number }
 
-export function buildCity(data: CityData, exclusions: Exclusion[], zones: P2[][], quality: "low" | "medium" | "high"): CityBuild {
+/** `progress` (0..1) is reported at each stage, for the loading bar. */
+export function buildCity(data: CityData, exclusions: Exclusion[], zones: P2[][], quality: "low" | "medium" | "high", progress?: (f: number) => void): CityBuild {
   const R = rng(1975);
   const detail = quality !== "low";
   const mask = new Mask();
@@ -299,17 +460,17 @@ export function buildCity(data: CityData, exclusions: Exclusion[], zones: P2[][]
   // Everything is clipped to the map frame, so streets and the river end
   // exactly at its edge instead of trailing out into nothing.
   const roads = data.roads
-    .flatMap((r): RoadData[] => (r.a ? [{ ...r, p: clipPolygon(r.p) }] : clipPolyline(r.p).map((p) => ({ ...r, p }))))
+    .flatMap((r): RoadData[] => (r.a ? clipToRegion(clipPolygon(r.p)).map((p) => ({ ...r, p })) : clipPolyline(r.p).flatMap(clipPolylineToRegion).map((p) => ({ ...r, p }))))
     .filter((r) => r.p.length > (r.a ? 2 : 1))
     .map((r) => (r.o && !r.a ? { ...r, w: Math.max(6, Math.round(r.w * 0.6)) } : r));
-  const water = data.water.map((w) => ({ ...w, p: clipPolygon(w.p) })).filter((w) => w.p.length > 2);
+  const water = data.water.flatMap((w) => clipToRegion(clipPolygon(w.p)).map((p) => ({ ...w, p })));
   const junctions = findJunctions(roads);
   const roofTops: [number, number, number][] = [];
   // Parks and land use keep their real outlines (no straight cut at the frame);
   // areas whose centre lies outside the frame are left to the open ring.
   const centreIn = (q: P2[]) => inBounds(q.reduce((a, b) => [a[0] + b[0] / q.length, a[1] + b[1] / q.length], [0, 0]));
-  const greens = data.green.filter((g) => g.p.length > 3 && centreIn(g.p));
-  const lots = (data.landuse ?? []).filter((l) => l.p.length > 2 && centreIn(l.p));
+  const greens = data.green.filter((g) => g.p.length > 3 && centreIn(g.p)).flatMap((g) => clipToRegion(g.p).map((p) => ({ ...g, p })));
+  const lots = (data.landuse ?? []).filter((l) => l.p.length > 2 && centreIn(l.p)).flatMap((l) => clipToRegion(l.p).map((p) => ({ ...l, p })));
 
   for (const w of water) mask.fillPolygon(w.p, M.WATER);
   // parks and non-residential land are never filled with generated buildings
@@ -328,12 +489,14 @@ export function buildCity(data: CityData, exclusions: Exclusion[], zones: P2[][]
   for (const e of exclusions) if (e.h) roofTops.push([e.x, e.z, e.h]);
   for (const e of exclusions) for (let z = -e.r; z <= e.r; z++) for (let x = -e.r; x <= e.r; x++) if (x * x + z * z <= e.r * e.r) mask.set(e.x + x, e.z + z, M.ZONE);
 
+  progress?.(0.05);
   /* --- OSM buildings ------------------------------------------------- */
   let osmCount = 0;
   // Reserve every mapped footprint, even ones we don't draw, so nothing else is placed there.
   for (const b of data.buildings) if (b.p.length > 2) mask.fillPolygon(b.p, M.BUILD);
   for (const b of data.buildings) {
-    if (!b.p.every((p) => inBounds(p))) continue;
+    // mapped footprints are drawn only when they lie wholly inside the cut rectangle
+    if (!b.p.every((p) => inBounds(p) && regionDepth(p[0], p[1]) > 1)) continue;
     // the city thins out toward its edge (landmarks are far inside the fade band)
     if (hash01(b.p[0][0], b.p[0][1]) > edgeKeep(b.p[0][0], b.p[0][1])) continue;
     if (exclusions.some((e) => pointInPolygon(e.x, e.z, b.p))) continue; // replaced by a landmark model
@@ -377,6 +540,7 @@ export function buildCity(data: CityData, exclusions: Exclusion[], zones: P2[][]
     return n >= 4;
   };
 
+  progress?.(0.35);
   /* --- generalised shophouses lining streets without OSM footprints ----- */
   let genCount = 0;
   const density = quality === "low" ? 0.45 : quality === "medium" ? 0.8 : 1;
@@ -433,6 +597,7 @@ export function buildCity(data: CityData, exclusions: Exclusion[], zones: P2[][]
     }
   }
 
+  progress?.(0.45);
   /* --- block interiors: rows of alley houses behind the street fronts ---- */
   // Unmapped ground deep inside a block (not park, school, site, water…) is
   // filled with rows of 2–5 storey houses aligned to the nearest street and
@@ -525,12 +690,16 @@ export function buildCity(data: CityData, exclusions: Exclusion[], zones: P2[][]
     }
   }
 
+  progress?.(0.6);
   /* --- streets ---------------------------------------------------------- */
   // Flat layers are drawn as ordered decals (see CityGround), so overlapping
   // ribbons can never z-fight; elevated decks are real 3D geometry instead.
   const roadsOut = newFlat(), walks = newFlat(), marks = newFlat();
-  const asphalt = new THREE.Color("#5c616a");
-  const sidewalk = new THREE.Color("#e3dccd");
+  // one asphalt family: arterials a touch darker than side streets (the hierarchy is carried by
+  // width, kerbs and lane markings rather than by contrasting colours)
+  const asphalt = new THREE.Color("#686e72"), street = new THREE.Color("#737a7e");
+  const roadTone = (r: RoadData) => (r.w >= 14 || /trunk|primary|secondary/.test(r.k) ? asphalt : street);
+  const sidewalk = new THREE.Color("#d9cfb8");
   const paving = new THREE.Color("#efe2c8");
   const white = new THREE.Color("#f4f4ee");
   const isElevated = (r: RoadData) => !!(r.b || (r.l ?? 0) >= 1);
@@ -550,10 +719,40 @@ export function buildCity(data: CityData, exclusions: Exclusion[], zones: P2[][]
   }
   for (const r of roads) {
     if (r.a || isElevated(r) || r.k === "pedestrian") continue;
-    ribbon(roadsOut, r.p, r.w, 0.02, asphalt);
+    ribbon(roadsOut, r.p, r.w, 0.02, roadTone(r));
   }
   // Basic lane marking only: a dashed centre line on wide two-way roads, kept clear of junctions.
   const nearJunction = (x: number, z: number) => (mask.get(x, z) & M.JUNCTION) !== 0;
+  // Kerbs: a light kerb line along both edges of every carriageway, broken where
+  // the road opens into a junction. Points are only emitted at vertices and at
+  // the junction breaks, so the line costs about as much as the road itself.
+  const kerb = new THREE.Color("#efebe2");
+  const edge = (pts: P2[], off: number): P2[] => pts.map((q, i) => {
+    const a = pts[Math.max(0, i - 1)], c = pts[Math.min(pts.length - 1, i + 1)];
+    const dx = c[0] - a[0], dz = c[1] - a[1], l = Math.hypot(dx, dz) || 1;
+    return [q[0] - (dz / l) * off, q[1] + (dx / l) * off];
+  });
+  for (const r of roads) {
+    if (r.a || isElevated(r) || r.k === "pedestrian" || r.k === "footway" || r.w < 5) continue;
+    for (const side of [1, -1]) {
+      const line = edge(r.p, (side * r.w) / 2);
+      let run: P2[] = [];
+      const flush = () => { if (run.length > 1) ribbon(marks, run, 0.45, 0.02, kerb, false); run = []; };
+      for (let i = 0; i < line.length - 1; i++) {
+        const a = line[i], b = line[i + 1];
+        const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 2.5));
+        let prevIn = true;
+        for (let k = 0; k <= n; k++) {
+          const t = k / n, x = a[0] + (b[0] - a[0]) * t, z = a[1] + (b[1] - a[1]) * t;
+          const inside = !nearJunction(x, z) && !(mask.get(x, z) & M.WATER);
+          if (!inside) { if (prevIn && run.length) run.push([x, z]); flush(); }
+          else if (!prevIn || (k === 0 && !run.length) || k === n) run.push([x, z]);
+          prevIn = inside;
+        }
+      }
+      flush();
+    }
+  }
   for (const r of roads) {
     if (r.a || r.o || isElevated(r) || r.w < 11 || r.k === "pedestrian") continue;
     for (let i = 0; i < r.p.length - 1; i++) {
@@ -569,6 +768,7 @@ export function buildCity(data: CityData, exclusions: Exclusion[], zones: P2[][]
     }
   }
 
+  progress?.(0.7);
   /* --- bridges & flyovers: real decks with sides, rails and piers ------- */
   const decks = newBuf();
   const deckTop = new THREE.Color("#50555d");
@@ -600,9 +800,29 @@ export function buildCity(data: CityData, exclusions: Exclusion[], zones: P2[][]
     // sidewalk ribbons at both ends where the deck meets the ground
   }
 
+  progress?.(0.75);
   /* --- water banks ------------------------------------------------------ */
   const banks = newFlat();
   const bankCol = new THREE.Color("#ddd3bd");
+  // shallows: two lighter teal bands just inside the bank (a soft water-to-shore
+  // transition, not a white outline), then the embankment kerb on top
+  const shallow1 = new THREE.Color("#7fbfb4"), shallow2 = new THREE.Color("#66b0a6");
+  const offsetRun = (run: P2[], off: number): P2[] => run.map((q, i) => {
+    const a = run[Math.max(0, i - 1)], c = run[Math.min(run.length - 1, i + 1)];
+    const dx = c[0] - a[0], dz = c[1] - a[1], l = Math.hypot(dx, dz) || 1;
+    return [q[0] - (dz / l) * off, q[1] + (dx / l) * off];
+  });
+  const shore = (run: P2[], poly: P2[]) => {
+    if (run.length > 1) {
+      // which side of the run is water? test a point just off its middle
+      const k = Math.floor(run.length / 2), probe = offsetRun(run, 4)[k];
+      const side = pointInPolygon(probe[0], probe[1], poly) ? 1 : -1;
+      const narrow = Math.abs(polygonArea(poly)) < 4000; // ponds & canals: thinner shallows
+      ribbon(banks, offsetRun(run, side * (narrow ? 2.5 : 5.5)), narrow ? 2 : 4, 0.02, shallow2);
+      ribbon(banks, offsetRun(run, side * (narrow ? 1.2 : 2.2)), narrow ? 1.6 : 3, 0.02, shallow1);
+    }
+    ribbon(banks, run, 2.6, 0.02, bankCol);
+  };
   for (const w of water) {
     // Only edges with both ends in view; out-of-view edges (incl. the clip
     // boundary) end a run instead of being bridged by one long segment.
@@ -619,19 +839,20 @@ export function buildCity(data: CityData, exclusions: Exclusion[], zones: P2[][]
     }
     let run: P2[] = [];
     for (let i = 0; i < ring.length; i++) {
-      if (i > 0 && onFrame(ring[i - 1], ring[i])) {
+      if (i > 0 && (onFrame(ring[i - 1], ring[i]) || onRegionEdge(ring[i - 1], ring[i]))) {
         // the clipped edge along the frame is not a riverbank
-        if (run.length > 1) ribbon(banks, run, 2.6, 0.02, bankCol);
+        if (run.length > 1) shore(run, w.p);
         run = [ring[i]];
       } else if (inBounds(ring[i], 150)) run.push(ring[i]);
       else {
-        if (run.length > 1) ribbon(banks, run, 2.6, 0.02, bankCol);
+        if (run.length > 1) shore(run, w.p);
         run = [];
       }
     }
-    if (run.length > 1) ribbon(banks, run, 2.6, 0.02, bankCol);
+    if (run.length > 1) shore(run, w.p);
   }
 
+  progress?.(0.8);
   /* --- trees ------------------------------------------------------------ */
   const trees: Tree[] = [];
   const NO_TRUNK = M.ROAD | M.BUILD | M.WATER | M.ZONE | M.JUNCTION;
@@ -651,7 +872,9 @@ export function buildCity(data: CityData, exclusions: Exclusion[], zones: P2[][]
           if (R() < 0.15) continue; // natural gaps
           const off = (r.w / 2 + 1.5) * side; // middle of the 3 m sidewalk
           const x = a[0] + ux * s - uz * off, z = a[1] + uz * s + ux * off;
-          const k: TreeKind = r.w >= 14 && R() < 0.45 ? 1 : R() < 0.2 ? 2 : 0;
+          // one species per street stretch mostly (streets are planted in runs), some mixing
+          const run = hash01(Math.round(a[0] / 90), Math.round(a[1] / 90));
+          const k: TreeKind = r.w >= 14 && R() < 0.45 ? 1 : R() < 0.15 ? 2 : run < 0.18 ? 4 : run < 0.3 ? 5 : 0;
           const sc = 0.75 + R() * 0.35;
           if (okTree(x, z, k === 1 ? 1.6 : 2.2 * sc)) trees.push({ x, z, s: sc, k });
         }
@@ -667,11 +890,15 @@ export function buildCity(data: CityData, exclusions: Exclusion[], zones: P2[][]
       if (R() < 0.3) continue; // clearings
       const tx = x + (R() - 0.5) * pStep * 0.8, tz = z + (R() - 0.5) * pStep * 0.8;
       if (!pointInPolygon(tx, tz, g.p) || !okTree(tx, tz, 2) || mask.near(tx, tz, 2, M.WALK)) continue;
-      trees.push({ x: tx, z: tz, s: 0.85 + R() * 0.5, k: R() < 0.25 ? 1 : R() < 0.2 ? 2 : 0 });
+      // parks are planted in groves: the dominant species changes from patch to patch
+      const grove = hash01(Math.round(tx / 45), Math.round(tz / 45));
+      const k: TreeKind = R() < 0.18 ? 2 : grove < 0.3 ? 5 : grove < 0.48 ? 1 : grove < 0.6 ? 3 : grove < 0.72 ? 4 : 0;
+      trees.push({ x: tx, z: tz, s: 0.85 + R() * 0.5, k });
     }
   }
 
 
+  progress?.(0.88);
   /* --- data for the living-city simulations ----------------------------- */
   // Sidewalk walking paths: offset polylines checked cell by cell; broken where
   // a building, the river or a junction interrupts them.
@@ -792,10 +1019,12 @@ export function buildCity(data: CityData, exclusions: Exclusion[], zones: P2[][]
   }
 
   const colouredLots = lots.filter((l) => LANDUSE_COLOR[l.k]);
+  // Building meshes are split into square chunks ("bucket@i,j"): each chunk is frustum-culled on
+  // its own, and facade details are faded in chunk by chunk near the camera (see CityBuildings).
   const buckets: Record<string, THREE.BufferGeometry> = {};
-  for (const [k, b] of Object.entries(B.walls)) if (b.pos.length) buckets[`wall:${k}`] = toGeometry(b);
-  for (const [k, b] of Object.entries(B.roofs)) if (b.pos.length) buckets[`roof:${k}`] = toGeometry(b);
-  if (B.details.pos.length) buckets.details = toGeometry(B.details);
+  for (const [k, b] of Object.entries(B.walls)) if (b.pos.length) splitChunks(b, `wall:${k}`, CHUNK, buckets);
+  for (const [k, b] of Object.entries(B.roofs)) if (b.pos.length) splitChunks(b, `roof:${k}`, CHUNK, buckets);
+  if (B.details.pos.length) splitChunks(B.details, "details", DETAIL_CHUNK, buckets);
 
   return {
     buckets,
@@ -803,17 +1032,17 @@ export function buildCity(data: CityData, exclusions: Exclusion[], zones: P2[][]
       roads: flatGeometry(roadsOut),
       walks: flatGeometry(walks),
       markings: flatGeometry(marks),
-      water: polygonsGeometry(water.map((w) => w.p), 0.02, new THREE.Color("#2f9fd6")),
+      water: polygonsGeometry(water.map((w) => w.p), 0.02, new THREE.Color("#4e9f98")),
       banks: flatGeometry(banks),
       green: mergeFlat(
         // land use first, so parks drawn after it win where they overlap
         polygonsGeometry(colouredLots.map((l) => l.p), 0.02, null, colouredLots.map((l) => new THREE.Color(LANDUSE_COLOR[l.k]))),
-        polygonsGeometry(greens.map((g) => g.p), 0.02, new THREE.Color("#6cc24a")),
+        polygonsGeometry(greens.map((g) => g.p), 0.02, new THREE.Color("#8fb36a")),
       ),
       decks: toGeometry(decks),
     },
-    trees,
-    lanes: buildLanes(roads, heights, junctions, (q) => inBounds(q, -30)),
+    trees: trees.filter((t) => inRegion(t.x, t.z, 3)),
+    lanes: buildLanes(roads, heights, junctions, (q) => inBounds(q, -30) && inRegion(q[0], q[1], 15)),
     junctions: junctions.map((j) => ({ x: j.x, z: j.z, axis: j.axis, offset: j.offset })),
     sidewalkPaths,
     openSpaces,

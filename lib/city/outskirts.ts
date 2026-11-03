@@ -1,14 +1,15 @@
 import * as THREE from "three";
 import { rng } from "@/lib/geo";
-import { CITY_BOUNDS, pointInPolygon } from "./buildCity";
+import { CITY_BOUNDS, clipPolygon, clipPolyline, DIORAMA, DIORAMA_PAD, pointInPolygon } from "./buildCity";
 import { prepPolygon, triangulate } from "./geom";
 import type { P2 } from "./types";
 
 /**
- * The open ring (~3 km) around the detailed city: real main roads and water
- * from OpenStreetMap continue past the city edge, while buildings thin out
- * within ~1.4 km and then stop — open ground the map can later grow into.
- * The houses here are generalised (not real footprints).
+ * The buffer band (DIORAMA_PAD wide) between the detailed city and the edge of
+ * the diorama: real main roads, residential streets and water from
+ * OpenStreetMap carry on to the edge, lined with generalised houses (not real
+ * footprints) so the city doesn't end in a straight cut. The data file covers
+ * a wider ring; everything past the diorama edge is clipped away.
  */
 export interface OutskirtsData {
   attribution: string;
@@ -20,16 +21,18 @@ export interface OutskirtsData {
   waterways: { k: string; n?: string; p: P2[] }[];
 }
 
-/** Distance (m) from a point to the detailed city rectangle; 0 inside it. */
+/** Distance (m) from a point to the detailed city rectangle, measured square (like the band); 0 inside it. */
 export function distanceToCity(x: number, z: number) {
   const dx = Math.max(CITY_BOUNDS.x0 - x, 0, x - CITY_BOUNDS.x1);
   const dz = Math.max(CITY_BOUNDS.z0 - z, 0, z - CITY_BOUNDS.z1);
-  return Math.hypot(dx, dz);
+  return Math.max(dx, dz);
 }
 
-/** How built-up the ring is at a distance from the city edge: 1 at the edge, 0 from FADE on. */
-export const FADE = 1400;
-export const edgeDensity = (d: number) => (d >= FADE ? 0 : (1 - d / FADE) ** 2);
+/** How built-up the band is at a distance from the city edge: dense at the city, a little sparser at the diorama edge, 0 past it. */
+export const FADE = DIORAMA_PAD;
+export const edgeDensity = (d: number) => (d >= FADE ? 0 : 1 - 0.35 * (d / FADE));
+/** Is the point on the diorama (with an inner margin)? */
+const onBase = (x: number, z: number, m = 0) => x > DIORAMA.x0 + m && x < DIORAMA.x1 - m && z > DIORAMA.z0 + m && z < DIORAMA.z1 - m;
 
 /** Pieces of a polyline that lie outside the detailed city rectangle. */
 export function outsideCity(p: P2[]): P2[][] {
@@ -170,21 +173,24 @@ export function buildOutskirts(d: OutskirtsData, quality: "low" | "medium" | "hi
 
   /* water: full outlines (inside the city they coincide with the city's own water) */
   const water: Flat = { pos: [], col: [] };
-  const wcol = new THREE.Color("#2f9fd6"), bank = new THREE.Color("#ddd3bd");
+  const wcol = new THREE.Color("#4e9f98"), bank = new THREE.Color("#ddd3bd");
   const banks: Flat = { pos: [], col: [] };
   const R0 = d.rect;
+  const onDiorama = (a: P2, b: P2) =>
+    (Math.abs(a[0] - DIORAMA.x0) < 1 && Math.abs(b[0] - DIORAMA.x0) < 1) || (Math.abs(a[0] - DIORAMA.x1) < 1 && Math.abs(b[0] - DIORAMA.x1) < 1) ||
+    (Math.abs(a[1] - DIORAMA.z0) < 1 && Math.abs(b[1] - DIORAMA.z0) < 1) || (Math.abs(a[1] - DIORAMA.z1) < 1 && Math.abs(b[1] - DIORAMA.z1) < 1);
   const onRect = (a: P2, b: P2) =>
     (Math.abs(a[0] - R0.x0) < 1 && Math.abs(b[0] - R0.x0) < 1) || (Math.abs(a[0] - R0.x1) < 1 && Math.abs(b[0] - R0.x1) < 1) ||
     (Math.abs(a[1] - R0.z0) < 1 && Math.abs(b[1] - R0.z0) < 1) || (Math.abs(a[1] - R0.z1) < 1 && Math.abs(b[1] - R0.z1) < 1);
   for (const w of d.water) {
-    const p = prepPolygon(w.p);
+    const p = prepPolygon(clipPolygon(w.p, DIORAMA));
     if (!p) continue;
     mask.fillPolygon(p);
     // embankment along the shore, as in the city (not along the data's outer clip line)
     let run: P2[] = [];
     const ring = [...p, p[0]];
     for (let i = 0; i < ring.length; i++) {
-      if (i > 0 && onRect(ring[i - 1], ring[i])) {
+      if (i > 0 && (onRect(ring[i - 1], ring[i]) || onDiorama(ring[i - 1], ring[i]))) {
         if (run.length > 1) ribbon(banks, run, 2.6, -0.028, bank);
         run = [];
       }
@@ -198,7 +204,7 @@ export function buildOutskirts(d: OutskirtsData, quality: "low" | "medium" | "hi
   }
   for (const w of d.waterways) {
     const width = w.k === "stream" ? 5 : 14;
-    for (const piece of outsideCity(w.p)) {
+    for (const piece of outsideCity(w.p).flatMap((q) => clipPolyline(q, DIORAMA))) {
       ribbon(water, piece, width, -0.03, wcol);
       for (let i = 0; i < piece.length - 1; i++) mask.fillSegment(piece[i], piece[i + 1], width / 2 + 2);
     }
@@ -217,7 +223,7 @@ export function buildOutskirts(d: OutskirtsData, quality: "low" | "medium" | "hi
     const reach = 260 + 220 * (0.5 + 0.5 * Math.sin(q[0] / 230 + Math.cos(q[1] / 190) * 2));
     return near < reach;
   });
-  const pieces = [...d.roads, ...minor].flatMap((r) => outsideCity(r.p).map((p) => ({ ...r, p })));
+  const pieces = [...d.roads, ...minor].flatMap((r) => outsideCity(r.p).flatMap((q) => clipPolyline(q, DIORAMA)).map((p) => ({ ...r, p })));
   for (const r of pieces) ribbon(roads, r.p, r.w + 4, -0.025, verge);
   for (const r of pieces) ribbon(roads, r.p, r.w, -0.02, asphalt);
   for (const r of pieces) for (let i = 0; i < r.p.length - 1; i++) mask.fillSegment(r.p[i], r.p[i + 1], r.w / 2 + 3);
@@ -244,7 +250,7 @@ export function buildOutskirts(d: OutskirtsData, quality: "low" | "medium" | "hi
             const w = 4.5 + R() * 3, dep = 9 + R() * 7;
             const off = r.w / 2 + 3.5 + dep / 2 + row * 19;
             const hx = x - uz * off * side, hz = z + ux * off * side;
-            if (mask.blocked(hx, hz, ux, uz, w + 1, dep + 1)) continue;
+            if (!onBase(hx, hz, Math.max(w, dep) / 2 + 2) || mask.blocked(hx, hz, ux, uz, w + 1, dep + 1)) continue;
             const floors = 1 + Math.floor(R() * (1 + dens * 4));
             houses.push(hx, hz, -Math.atan2(uz, ux), w, dep, floors * 3.4 + 0.4, Math.floor(R() * 12));
             const nx = -uz, nz = ux;
@@ -259,9 +265,9 @@ export function buildOutskirts(d: OutskirtsData, quality: "low" | "medium" | "hi
   const trees: number[] = [];
   const nTrees = quality === "low" ? 1500 : 4000;
   for (let i = 0, tries = 0; i < nTrees && tries < nTrees * 8; tries++) {
-    const x = d.rect.x0 + R() * (d.rect.x1 - d.rect.x0), z = d.rect.z0 + R() * (d.rect.z1 - d.rect.z0);
+    const x = DIORAMA.x0 + R() * (DIORAMA.x1 - DIORAMA.x0), z = DIORAMA.z0 + R() * (DIORAMA.z1 - DIORAMA.z0);
     const dist = distanceToCity(x, z);
-    if (dist <= 0 || R() > 0.25 + edgeDensity(dist) * 0.6 || mask.get(x, z)) continue;
+    if (dist <= 0 || !onBase(x, z, 4) || R() > 0.25 + edgeDensity(dist) * 0.6 || mask.get(x, z)) continue;
     trees.push(x, z, 0.8 + R() * 0.6);
     i++;
   }

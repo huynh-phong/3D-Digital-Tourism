@@ -207,8 +207,8 @@ export function DinhExperience() {
       <AnimatePresence>
         {phase === "loading" && (
           <motion.div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-bg" exit={{ opacity: 0 }} role="status" aria-live="polite">
-            <div className="h-10 w-10 animate-spin rounded-full border-4 border-accent-soft border-t-[var(--accent)]" />
-            <p className="text-sm text-muted">{t.tour.loadingScene}</p>
+            <div className="h-11 w-11 animate-spin rounded-full border-4 border-ink border-t-[var(--accent)]" />
+            <p className="text-sm font-semibold">{t.tour.loadingScene}</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -216,26 +216,28 @@ export function DinhExperience() {
       {/* HUD */}
       <div className={`pointer-events-none absolute inset-0 z-20 transition-opacity duration-500 ${phase === "intro" || phase === "loading" ? "opacity-0" : "opacity-100"}`}>
         {/* top-left: logo + area */}
-        <div className="absolute left-3 top-3 flex items-center gap-2 sm:left-4 sm:top-4">
-          <Link href="/" onClick={() => narrator?.stop()} className="panel pointer-events-auto flex items-center gap-2.5 px-2.5 py-2" aria-label={t.tour.backToMap}>
-            <Logo />
-            <span className="hidden leading-tight sm:block">
-              <span className="block text-[13px] font-bold">{t.app.name}</span>
-              <span className="block text-[11px] text-muted">Dinh Độc Lập</span>
-            </span>
-          </Link>
-          <div className="panel px-3 py-2" aria-live="polite">
-            <p className="text-[10.5px] uppercase tracking-wide text-muted">{t.tour.current}</p>
-            <p className="text-[13px] font-semibold">{areaName}</p>
+        <div className="panel absolute left-3 top-3 flex max-w-[calc(100vw-200px)] items-center gap-2.5 px-3 py-2 sm:left-4 sm:top-4 sm:max-w-none" aria-live="polite">
+          <Logo />
+          <div className="min-w-0 leading-tight">
+            <p className="title-game truncate text-[15px] sm:text-lg">Dinh Độc Lập</p>
+            <p className="truncate text-[12px] font-medium text-muted" title={t.tour.current}>{`${areaName} · ${t.tour.walkingMode}`}</p>
           </div>
         </div>
         {/* top-right */}
         <div className="absolute right-3 top-3 flex items-center gap-1.5 sm:right-4 sm:top-4">
           <div className="panel pointer-events-auto flex items-center gap-1.5 p-1.5">
             <IconButton icon="layers" label={`${t.tour.floorMap} (${keyLabel(keys.map)})`} onClick={() => { releasePointer(); useGame.setState({ mapOpen: true }); }} />
-            <IconButton icon="camera" label={`${camMode === "first" ? t.tour.camera.first : t.tour.camera.third} (${keyLabel(keys.camera)})`} onClick={() => useGame.setState({ camMode: camMode === "first" ? "third" : "first" })} />
+            <IconButton icon="camera" className="max-sm:hidden" label={`${camMode === "first" ? t.tour.camera.first : t.tour.camera.third} (${keyLabel(keys.camera)})`} onClick={() => useGame.setState({ camMode: camMode === "first" ? "third" : "first" })} />
             <TopControls onSettings={pause} onHelp={() => useSettings.getState().set({ showHelp: !showHelp })} />
           </div>
+          <Link
+            href="/"
+            onClick={() => narrator?.stop()}
+            aria-label={t.tour.backToMap}
+            className="btn-game pointer-events-auto hidden h-[52px] items-center gap-2 bg-surface-solid px-3.5 text-[13px] font-bold hover:bg-mint sm:inline-flex"
+          >
+            <Icon name="map" size={18} /> {t.tour.backToMapShort}
+          </Link>
         </div>
         {/* left: journey */}
         <div className="absolute left-3 top-[84px] hidden sm:left-4 sm:block">
@@ -246,13 +248,25 @@ export function DinhExperience() {
           <InfoPanel />
         </div>
         {/* bottom-left: controls */}
-        {!touch && showHelp && playing && (
-          <div className="panel absolute bottom-4 left-4 hidden max-w-[360px] px-3 py-2 md:block">
-            <p className="flex items-center justify-between text-[12px] font-semibold">
-              {t.controls.title}
-              <span className="text-[10.5px] font-normal text-muted"><span className="kbd">{keyLabel(keys.help)}</span> {t.controls.help}</span>
-            </p>
-            <ControlsGrid compact />
+        {!touch && playing && (
+          <div className="panel pointer-events-auto absolute bottom-4 left-4 hidden max-w-[360px] md:block">
+            <button
+              type="button"
+              aria-expanded={showHelp}
+              onClick={() => useSettings.getState().set({ showHelp: !showHelp })}
+              className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[13px] font-bold"
+            >
+              <span className="flex items-center gap-1.5">
+                <span aria-hidden className={`inline-block transition-transform ${showHelp ? "rotate-90" : ""}`}>▶</span>
+                {t.controls.title}
+              </span>
+              <span className="text-[10.5px] font-medium text-muted"><span className="kbd">{keyLabel(keys.help)}</span></span>
+            </button>
+            {showHelp && (
+              <div className="border-t-2 border-ink px-3 pb-2 pt-1.5">
+                <ControlsGrid compact />
+              </div>
+            )}
           </div>
         )}
         {/* bottom-right: Minh Anh */}
@@ -268,16 +282,16 @@ export function DinhExperience() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.18 }}
-              className="absolute bottom-40 left-1/2 -translate-x-1/2 sm:bottom-28"
+              className="absolute left-1/2 top-[60%] -translate-x-1/2 sm:bottom-28 sm:top-auto"
               role="status"
               aria-live="polite"
             >
               {passive ? (
-                <p className="panel flex items-center gap-2 px-3 py-1.5 text-[12.5px] text-muted">
+                <p className="panel flex items-center gap-2 px-3 py-1.5 text-[12.5px] font-medium">
                   <Icon name="stairs" size={14} /> {prompt}
                 </p>
               ) : (
-                <button type="button" onClick={interact} className="panel pointer-events-auto flex items-center gap-2 px-3 py-2 text-[13px] font-medium">
+                <button type="button" onClick={interact} className="panel pointer-events-auto flex items-center gap-2.5 px-3.5 py-2 text-[14px] font-bold hover:bg-mint">
                   <span className="kbd">{touch ? t.tour.interact : keyLabel(keys.interact)}</span> {prompt}
                 </button>
               )}
@@ -285,7 +299,7 @@ export function DinhExperience() {
           )}
         </AnimatePresence>
         {/* top centre: directions, guide notices, mouse-look status */}
-        <div className="absolute left-1/2 top-3 flex w-max max-w-[calc(100vw-24px)] -translate-x-1/2 flex-col items-center gap-1.5 sm:top-4">
+        <div className="absolute left-1/2 top-[76px] flex w-max max-w-[calc(100vw-24px)] -translate-x-1/2 flex-col items-center gap-1.5 sm:top-4">
           {playing && <NavCard />}
           <GuideNotices />
           {!touch && <PointerChip canvas={canvas} />}

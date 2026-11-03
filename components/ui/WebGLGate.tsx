@@ -65,7 +65,7 @@ class SceneBoundary extends Component<{ children: ReactNode; message: string; re
               >
                 {this.props.retry}
               </button>
-              <Link className="rounded-xl border border-line px-3 py-2" href="/">
+              <Link className="btn-game bg-surface-solid px-3 py-2 font-bold" href="/">
                 ←
               </Link>
             </div>

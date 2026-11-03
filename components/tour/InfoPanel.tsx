@@ -33,7 +33,7 @@ export function InfoPanel() {
           <Button size="sm" icon="replay" onClick={() => playStop(s.id, "main")}>{t.tour.replay}</Button>
           <Button size="sm" icon="book" onClick={() => playStop(s.id, "deep")}>{t.tour.deeper}</Button>
         </div>
-        <details className="mt-3 rounded-xl border border-line px-3 py-2 text-[13px]" open>
+        <details className="mt-3 rounded-[10px] border-2 border-ink bg-surface-2 px-3 py-2 text-[13px]" open>
           <summary className="cursor-pointer font-semibold">{t.tour.deeper}</summary>
           <p className="mt-1.5 leading-relaxed text-muted">{loc(s.narration.deep, lang)}</p>
         </details>

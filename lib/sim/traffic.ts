@@ -8,29 +8,81 @@ import type { VehicleKind } from "./models";
  *   (motorbikes may ride two abreast in their own sub-lane)
  * - junctions: two-phase signals; turns follow a quadratic Bézier from the end
  *   of one lane, through the junction node, to the start of the next lane
- * - vehicle mix and density depend on the road class
+ * - vehicle mix and density depend on the road class; heavy lorries keep out
+ *   of the historic core
+ * - turn speed follows the turn radius and the vehicle's size (a bus takes a
+ *   corner much slower than a motorbike); two-wheelers lean into turns
+ * - a vehicle stuck for a long time (gridlock) re-enters elsewhere, off-screen
  * Positions are in the project's city frame (metres, +x east, +z south).
+ * The mix percentages are an artistic estimate of Saigon traffic, not statistics.
  */
 
-export interface VehicleSpec { kind: VehicleKind; length: number; maxSpeed: number; accel: number; classes: RoadClass[] }
+/** latAcc: comfortable lateral acceleration (m/s²) in turns — sets the turn speed for a given radius. */
+export interface VehicleSpec { kind: VehicleKind; length: number; maxSpeed: number; accel: number; latAcc: number; classes: RoadClass[] }
 
+const ALL: RoadClass[] = ["major", "minor", "local"];
 export const VEHICLES: Record<VehicleKind, Omit<VehicleSpec, "kind">> = {
-  motorbike: { length: 1.9, maxSpeed: 9, accel: 3.2, classes: ["major", "minor", "local"] },
-  scooter: { length: 1.8, maxSpeed: 8, accel: 3.0, classes: ["major", "minor", "local"] },
-  bicycle: { length: 1.7, maxSpeed: 4, accel: 1.2, classes: ["minor", "local"] },
-  car: { length: 4.3, maxSpeed: 10, accel: 2.4, classes: ["major", "minor", "local"] },
-  taxi: { length: 4.5, maxSpeed: 10, accel: 2.4, classes: ["major", "minor", "local"] },
-  van: { length: 4.8, maxSpeed: 8.5, accel: 1.8, classes: ["major", "minor", "local"] },
-  bus: { length: 11, maxSpeed: 7.5, accel: 1.1, classes: ["major", "minor"] },
-  truck: { length: 8.8, maxSpeed: 7, accel: 1.0, classes: ["major"] },
+  motorbike: { length: 1.9, maxSpeed: 9, accel: 3.2, latAcc: 3.2, classes: ALL },
+  scooter: { length: 1.8, maxSpeed: 8, accel: 3.0, latAcc: 3.0, classes: ALL },
+  delivery: { length: 2.0, maxSpeed: 8.5, accel: 2.8, latAcc: 2.8, classes: ALL },
+  pillion: { length: 1.95, maxSpeed: 8, accel: 2.6, latAcc: 2.6, classes: ALL },
+  ebike: { length: 1.75, maxSpeed: 7.5, accel: 3.0, latAcc: 3.0, classes: ALL },
+  bicycle: { length: 1.7, maxSpeed: 4, accel: 1.2, latAcc: 2.2, classes: ["minor", "local"] },
+  car: { length: 4.3, maxSpeed: 10, accel: 2.4, latAcc: 2.2, classes: ALL },
+  hatchback: { length: 3.8, maxSpeed: 10, accel: 2.5, latAcc: 2.3, classes: ALL },
+  suv: { length: 4.7, maxSpeed: 10, accel: 2.2, latAcc: 2.0, classes: ["major", "minor"] },
+  pickup: { length: 5.2, maxSpeed: 9, accel: 2.0, latAcc: 1.9, classes: ["major", "minor"] },
+  ev: { length: 4.4, maxSpeed: 10, accel: 3.0, latAcc: 2.2, classes: ALL },
+  taxi: { length: 4.5, maxSpeed: 10, accel: 2.4, latAcc: 2.2, classes: ALL },
+  van: { length: 4.8, maxSpeed: 8.5, accel: 1.8, latAcc: 1.8, classes: ALL },
+  minibus: { length: 6.6, maxSpeed: 8.5, accel: 1.5, latAcc: 1.5, classes: ["major", "minor"] },
+  minitruck: { length: 5.6, maxSpeed: 8, accel: 1.4, latAcc: 1.5, classes: ["major", "minor"] },
+  bus: { length: 11, maxSpeed: 7.5, accel: 1.1, latAcc: 1.1, classes: ["major", "minor"] },
+  truck: { length: 8.8, maxSpeed: 7, accel: 1.0, latAcc: 1.0, classes: ["major"] },
 };
 
+/**
+ * Mix per road class (weights). Arterials: ~50 % two-wheelers, ~32 % cars and
+ * taxis, ~7 % buses, ~10 % goods vehicles, ~2 % bicycles; side streets and
+ * alleys are mostly motorbikes and have no buses or lorries. Over the whole
+ * network about 62 % of vehicles are two-wheelers.
+ */
 const MIX: Record<RoadClass, [VehicleKind, number][]> = {
-  major: [["motorbike", 34], ["scooter", 20], ["car", 20], ["taxi", 8], ["bus", 5], ["van", 6], ["truck", 4], ["bicycle", 3]],
-  minor: [["motorbike", 36], ["scooter", 24], ["car", 15], ["taxi", 8], ["van", 7], ["bus", 2], ["bicycle", 8]],
-  local: [["motorbike", 40], ["scooter", 30], ["car", 6], ["van", 4], ["bicycle", 20]],
+  major: [
+    ["motorbike", 22], ["scooter", 16], ["delivery", 7], ["pillion", 7], ["ebike", 5], ["bicycle", 2],
+    ["car", 12], ["hatchback", 6], ["suv", 5], ["ev", 4], ["taxi", 7], ["pickup", 2],
+    ["bus", 5], ["minibus", 3], ["van", 5], ["minitruck", 3], ["truck", 3],
+  ],
+  minor: [
+    ["motorbike", 24], ["scooter", 18], ["delivery", 8], ["pillion", 8], ["ebike", 5], ["bicycle", 4],
+    ["car", 10], ["hatchback", 6], ["suv", 3], ["ev", 3], ["taxi", 6], ["pickup", 1],
+    ["bus", 2], ["minibus", 3], ["van", 4], ["minitruck", 2],
+  ],
+  local: [
+    ["motorbike", 30], ["scooter", 24], ["delivery", 10], ["pillion", 10], ["ebike", 7], ["bicycle", 8],
+    ["hatchback", 4], ["car", 3], ["ev", 1], ["van", 2], ["taxi", 1],
+  ],
 };
-const DENSITY: Record<RoadClass, number> = { major: 1, minor: 0.55, local: 0.16 }; // relative per metre
+const DENSITY: Record<RoadClass, number> = { major: 1, minor: 0.6, local: 0.2 }; // relative per metre
+/** Traffic peaks around the District 1 centre and fades over ~2.4 km. */
+const BUSY = { x: 800, z: 150, r: 2400 };
+/** Historic core (palace, cathedral, Bến Thành): no heavy lorries there. */
+const CORE = { x: 350, z: 100, r: 900 };
+const TWO_WHEEL = new Set<VehicleKind>(["motorbike", "scooter", "delivery", "pillion", "ebike", "bicycle"]);
+
+/**
+ * Safe speed (m/s) through the turn from lane `a` into lane `b`: v = √(latAcc · radius),
+ * the radius estimated from the chord between the lanes and the turn angle.
+ */
+export function cornerSpeed(latAcc: number, vmax: number, a: Pick<Lane, "pts" | "endHeading">, b: Pick<Lane, "pts">) {
+  const h = Math.atan2(b.pts[1][1] - b.pts[0][1], b.pts[1][0] - b.pts[0][0]);
+  const theta = Math.abs(Math.atan2(Math.sin(h - a.endHeading), Math.cos(h - a.endHeading)));
+  if (theta < 0.2) return vmax;
+  const e = a.pts[a.pts.length - 1], st = b.pts[0];
+  const chord = Math.max(2, Math.hypot(st[0] - e[0], st[1] - e[1]));
+  const radius = Math.min(60, chord / (2 * Math.sin(Math.min(Math.PI / 2, theta / 2))));
+  return Math.max(1.2, Math.min(vmax, Math.sqrt(latAcc * radius)));
+}
 
 export interface Vehicle {
   kind: VehicleKind;
@@ -41,11 +93,19 @@ export interface Vehicle {
   vmax: number;
   slot: number; // lateral sub-lane offset (m), bikes only
   conn: Conn | null;
+  /** lane chosen ahead of the junction (so the vehicle can slow for the turn); -1 = not yet */
+  next: number;
+  /** safe speed through the coming turn */
+  turnV: number;
   wheel: number; // wheel rotation (rad·r)
   stopped: number; // seconds standing still
   respawns: number;
   // render state (smoothed)
   x: number; y: number; z: number; yaw: number; pitch: number;
+  /** body roll (rad): two-wheelers lean into turns */
+  lean: number;
+  /** pose refreshed this frame (false = off-screen, its last pose is kept) */
+  fresh: boolean;
 }
 
 interface Conn { ax: number; az: number; ay: number; cx: number; cz: number; bx: number; bz: number; by: number; length: number; to: number; t: number }
@@ -64,15 +124,21 @@ export class TrafficSimulation {
   constructor(readonly lanes: Lane[], readonly junctions: { x: number; z: number; axis: number; offset: number }[], count: number, seed = 304) {
     this.R = rng(seed);
     const usable = lanes.map((l, i) => i).filter((i) => lanes[i].length > 20);
-    const weight = (i: number) => lanes[i].length * DENSITY[lanes[i].cls];
+    // busier towards District 1 / the CBD, calmer at the edges of the map
+    const busy = (i: number) => {
+      const m = lanes[i].pts[Math.floor(lanes[i].pts.length / 2)];
+      return 0.45 + 2 * Math.max(0, 1 - Math.hypot(m[0] - BUSY.x, m[1] - BUSY.z) / BUSY.r);
+    };
+    const weight = (i: number) => lanes[i].length * DENSITY[lanes[i].cls] * busy(i);
     const total = usable.reduce((a, i) => a + weight(i), 0);
     if (!total) return;
     for (const i of usable) {
       const lane = lanes[i];
       const n = Math.floor((weight(i) / total) * count + this.R());
       let s = this.R() * 6;
+      const mid = lane.pts[Math.floor(lane.pts.length / 2)];
       for (let k = 0; k < n && s < lane.length - 3; k++) {
-        const kind = this.pickKind(lane.cls);
+        const kind = this.pickKind(lane.cls, mid[0], mid[1]);
         const spec = VEHICLES[kind];
         const v = this.make(kind, i, s);
         v.v = v.vmax * 0.6;
@@ -83,11 +149,17 @@ export class TrafficSimulation {
     for (const v of this.vehicles) this.place(v, 1);
   }
 
-  private pickKind(cls: RoadClass): VehicleKind {
+  private pickKind(cls: RoadClass, x = Infinity, z = Infinity): VehicleKind {
     const mix = MIX[cls];
     let r = this.R() * mix.reduce((a, [, w]) => a + w, 0);
-    for (const [k, w] of mix) if ((r -= w) <= 0) return k;
-    return mix[0][0];
+    let kind = mix[0][0];
+    for (const [k, w] of mix) if ((r -= w) <= 0) { kind = k; break; }
+    if (kind === "truck" && Math.hypot(x - CORE.x, z - CORE.z) < CORE.r) kind = "van";
+    return kind;
+  }
+
+  private turnSpeed(v: Vehicle, a: Lane, b: Lane) {
+    return cornerSpeed(v.spec.latAcc, v.vmax, a, b);
   }
 
   private make(kind: VehicleKind, lane: number, s: number): Vehicle {
@@ -97,7 +169,7 @@ export class TrafficSimulation {
       kind, spec, lane, s, v: 0,
       vmax: Math.min(spec.maxSpeed, this.lanes[lane].speed * (bike ? 0.95 : 1)) * (0.85 + this.R() * 0.25),
       slot: bike ? (this.R() < 0.5 ? -0.7 : 0.7) * Math.min(1, this.lanes[lane].width / 8) : 0,
-      conn: null, wheel: 0, stopped: 0, respawns: 0, x: 0, y: 0, z: 0, yaw: 0, pitch: 0,
+      conn: null, next: -1, turnV: Infinity, wheel: 0, stopped: 0, respawns: 0, x: 0, y: 0, z: 0, yaw: 0, pitch: 0, lean: 0, fresh: true,
     };
   }
 
@@ -157,12 +229,19 @@ export class TrafficSimulation {
         // stop line at red lights
         const toEnd = lane.length - v.s - v.spec.length / 2;
         if (!green && !v.conn && toEnd < 30 && toEnd > -1) target = Math.min(target, Math.max(0, (toEnd - 1.5) * 0.8));
-        // slow for curves into the next lane
-        if (toEnd < 12 && lane.next.length > 1) target = Math.min(target, v.vmax * 0.7);
+        // pick the next lane ~35 m ahead, then brake smoothly to the turn speed
+        if (!v.conn && v.next < 0 && toEnd < 35) {
+          v.next = this.chooseNext(v);
+          v.turnV = v.next >= 0 ? this.turnSpeed(v, lane, this.lanes[v.next]) : v.vmax;
+        }
+        if (!v.conn && v.next >= 0) target = Math.min(target, Math.sqrt(v.turnV * v.turnV + 2 * 1.6 * Math.max(0, toEnd)));
+        if (v.conn) target = Math.min(target, v.turnV);
         const a = target > v.v ? v.spec.accel : 6;
         v.v += Math.max(-a * dt, Math.min(a * dt, target - v.v));
         if (v.v < 0.05) v.stopped += dt;
         else v.stopped = 0;
+        // gridlock breaker: after 30 s at a standstill, re-enter elsewhere (only where nobody sees it)
+        if (v.stopped > 30 && !this.isVisible(v.x, v.z) && this.respawn(v)) return;
 
         if (v.conn) {
           // travelling the junction connector; s < 0 until we enter the next lane
@@ -181,23 +260,31 @@ export class TrafficSimulation {
     }
   }
 
+  /** Moves a vehicle to the start of a random suitable lane out of the camera's view. */
+  private respawn(v: Vehicle) {
+    for (let tries = 0; tries < 20; tries++) {
+      const li = Math.floor(this.R() * this.lanes.length);
+      const l = this.lanes[li];
+      if (l.length < 30 || !v.spec.classes.includes(l.cls) || this.isVisible(l.pts[0][0], l.pts[0][1])) continue;
+      if ((this.byLane.get(li) ?? []).some((o) => o.s < v.spec.length + 8)) continue;
+      v.lane = li;
+      v.s = 0;
+      v.conn = null;
+      v.next = -1;
+      v.stopped = 0;
+      v.respawns++;
+      this.place(v, 1);
+      return true;
+    }
+    return false;
+  }
+
   private enterJunction(v: Vehicle) {
     const lane = this.lanes[v.lane];
-    const nextIdx = this.chooseNext(v);
+    const nextIdx = v.next >= 0 ? v.next : this.chooseNext(v);
     if (nextIdx < 0) {
       // Lane leaves the map: re-enter somewhere else, out of the camera's view.
-      for (let tries = 0; tries < 20; tries++) {
-        const li = Math.floor(this.R() * this.lanes.length);
-        const l = this.lanes[li];
-        if (l.length < 30 || !v.spec.classes.includes(l.cls) || this.isVisible(l.pts[0][0], l.pts[0][1])) continue;
-        if ((this.byLane.get(li) ?? []).some((o) => o.s < v.spec.length + 8)) continue;
-        v.lane = li;
-        v.s = 0;
-        v.conn = null;
-        v.respawns++;
-        this.place(v, 1);
-        return;
-      }
+      if (this.respawn(v)) return;
       v.s = lane.length;
       v.v = 0;
       return;
@@ -229,14 +316,47 @@ export class TrafficSimulation {
     const length = Math.max(1, d * 1.1);
     const ay = lane.ys[lane.ys.length - 1], by = nl.ys[0];
     v.conn = { ax: a[0], az: a[1], ay, cx, cz, bx: b[0], bz: b[1], by, length, to: nextIdx, t: 0 };
+    if (v.next !== nextIdx) v.turnV = this.turnSpeed(v, lane, nl); // not chosen ahead (short lane)
     v.lane = nextIdx;
     v.s = -length;
+    v.next = -1;
     v.vmax = Math.min(v.spec.maxSpeed, nl.speed) * (0.85 + this.R() * 0.25);
   }
 
-  /** Writes the smoothed pose of every vehicle (call once per rendered frame). */
-  pose(alpha = 0.35) {
-    for (const v of this.vehicles) this.place(v, alpha);
+  private frame = 0;
+  private acc = 0;
+  /** Fixed-step update (30 Hz, at most 3 steps a frame): cost no longer grows with the frame rate. */
+  step(dt: number) {
+    this.acc = Math.min(this.acc + dt, 0.1);
+    while (this.acc >= 1 / 30) {
+      this.update(1 / 30);
+      this.acc -= 1 / 30;
+    }
+  }
+
+  /**
+   * Writes the smoothed pose of the vehicles (call once per rendered frame).
+   * With `near`, only vehicles near the view are refreshed every frame; the
+   * others on a rolling 1-in-8 schedule. A vehicle refreshed after a gap snaps
+   * to its true place instead of gliding there.
+   */
+  pose(alpha = 0.35, dt = 1 / 60, near?: (x: number, z: number) => boolean) {
+    this.frame++;
+    for (let i = 0; i < this.vehicles.length; i++) {
+      const v = this.vehicles[i];
+      const wasFresh = v.fresh;
+      v.fresh = !near || (i & 7) === (this.frame & 7) || near(v.x, v.z);
+      if (!v.fresh) continue;
+      const yaw0 = v.yaw;
+      this.place(v, wasFresh ? alpha : 1);
+      if (TWO_WHEEL.has(v.kind) && wasFresh) {
+        // lean = atan(v·ω / g), smoothed and capped
+        let d = v.yaw - yaw0;
+        d = Math.atan2(Math.sin(d), Math.cos(d));
+        const target = Math.max(-0.4, Math.min(0.4, -Math.atan((v.v * d) / Math.max(1e-3, dt) / 9.81)));
+        v.lean += (target - v.lean) * Math.min(1, dt * 6);
+      }
+    }
   }
 
   private place(v: Vehicle, alpha: number) {

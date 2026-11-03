@@ -10,15 +10,24 @@ import type { BoatKind } from "./models";
  * enter the narrow canal. Routes are simulated, not real ferry timetables.
  */
 
-export const BOATS: Record<BoatKind, { length: number; speed: number; minHalfWidth: number; weight: number }> = {
-  tour: { length: 26, speed: 2.6, minHalfWidth: 70, weight: 3 },
-  ferry: { length: 18, speed: 3.4, minHalfWidth: 60, weight: 2 },
-  barge: { length: 40, speed: 1.8, minHalfWidth: 90, weight: 2 },
-  boat: { length: 7, speed: 2.2, minHalfWidth: 10, weight: 4 },
-  speedboat: { length: 8, speed: 6, minHalfWidth: 25, weight: 2 },
+/**
+ * Boat types. weight = share of the fleet (≈ tour 25 %, passenger 20 %,
+ * speedboat 20 %, goods 20 %, small craft 15 % where the channel allows);
+ * response = how fast speed and heading follow the target (barges: heavy and slow);
+ * wake = strength of the wake drawn by the water shader; beam = hull width.
+ */
+export const BOATS: Record<BoatKind, { length: number; beam: number; speed: number; minHalfWidth: number; weight: number; response: number; wake: number }> = {
+  tour: { length: 26, beam: 6, speed: 2.6, minHalfWidth: 70, weight: 13, response: 0.35, wake: 0.6 },
+  glasstour: { length: 20, beam: 5, speed: 3.0, minHalfWidth: 60, weight: 12, response: 0.4, wake: 0.6 },
+  ferry: { length: 18, beam: 5, speed: 3.6, minHalfWidth: 60, weight: 20, response: 0.45, wake: 0.75 },
+  speedboat: { length: 8, beam: 2.4, speed: 7, minHalfWidth: 25, weight: 20, response: 1.0, wake: 1.0 },
+  barge: { length: 40, beam: 8, speed: 1.6, minHalfWidth: 90, weight: 9, response: 0.12, wake: 0.45 },
+  cargo: { length: 32, beam: 7, speed: 2.0, minHalfWidth: 90, weight: 6, response: 0.15, wake: 0.5 },
+  tug: { length: 12, beam: 4.2, speed: 2.8, minHalfWidth: 50, weight: 5, response: 0.3, wake: 0.7 },
+  boat: { length: 7, beam: 2, speed: 2.2, minHalfWidth: 10, weight: 15, response: 0.6, wake: 0.35 },
 };
 
-export interface Boat { kind: BoatKind; route: number; s: number; v: number; vmax: number; phase: number; x: number; y: number; z: number; yaw: number; roll: number }
+export interface Boat { kind: BoatKind; route: number; s: number; v: number; vmax: number; phase: number; x: number; y: number; z: number; yaw: number; roll: number; pitch: number }
 
 interface Route { pts: P2[]; cum: number[]; length: number; halfWidth: number }
 
@@ -88,17 +97,26 @@ export class WaterTrafficSimulation {
       this.routes.push({ pts: l.pts, cum, length: cum[cum.length - 1], halfWidth: l.halfWidth });
     }
     if (!this.routes.length) return;
-    const total = this.routes.reduce((a, r) => a + r.length, 0);
+    // the Saigon River carries most of the fleet; canals get a few small boats
+    const share = (r: Route) => r.length * (r.halfWidth >= 60 ? 1 : 0.25);
+    const total = this.routes.reduce((a, r) => a + share(r), 0);
     this.routes.forEach((route, ri) => {
       const kinds = (Object.keys(BOATS) as BoatKind[]).filter((k) => BOATS[k].minHalfWidth <= route.halfWidth);
       if (!kinds.length) return;
-      const n = Math.max(1, Math.round((route.length / total) * count));
+      const n = Math.max(1, Math.round((share(route) / total) * count));
+      // fleet mix follows the weights (largest deficit first), starting at a random point
+      const W = kinds.reduce((a, k) => a + BOATS[k].weight, 0);
+      const got = new Map<BoatKind, number>();
+      const skew = R();
       for (let i = 0; i < n; i++) {
-        let pickW = R() * kinds.reduce((a, k) => a + BOATS[k].weight, 0);
-        let kind = kinds[0];
-        for (const k of kinds) if ((pickW -= BOATS[k].weight) <= 0) { kind = k; break; }
+        let kind = kinds[0], best = -Infinity;
+        for (const k of kinds) {
+          const deficit = (BOATS[k].weight / W) * (i + 1 + skew) - (got.get(k) ?? 0);
+          if (deficit > best) { best = deficit; kind = k; }
+        }
+        got.set(kind, (got.get(kind) ?? 0) + 1);
         const vmax = BOATS[kind].speed * (0.85 + R() * 0.3);
-        this.boats.push({ kind, route: ri, s: (route.length * (i + R() * 0.4)) / n, v: vmax, vmax, phase: R() * 10, x: 0, y: 0, z: 0, yaw: 0, roll: 0 });
+        this.boats.push({ kind, route: ri, s: (route.length * (i + R() * 0.4)) / n, v: vmax, vmax, phase: R() * 10, x: 0, y: 0, z: 0, yaw: 0, roll: 0, pitch: 0 });
       }
     });
     this.pose(0);
@@ -118,7 +136,7 @@ export class WaterTrafficSimulation {
         gap = Math.min(gap, d - (BOATS[o.kind].length + BOATS[b.kind].length) / 2);
       }
       const target = Math.min(b.vmax, Math.max(0, (gap - 15) * 0.2));
-      b.v += (target - b.v) * Math.min(1, dt * 0.5);
+      b.v += (target - b.v) * Math.min(1, dt * BOATS[b.kind].response);
       b.s = (b.s + b.v * dt) % route.length;
     }
   }
@@ -129,11 +147,29 @@ export class WaterTrafficSimulation {
       const yaw = Math.atan2(p.dx, p.dz);
       let d = yaw - b.yaw;
       d = Math.atan2(Math.sin(d), Math.cos(d));
-      b.yaw += dt ? d * Math.min(1, dt * 1.5) : d;
-      b.roll = -d * 0.6 + Math.sin(this.time * 1.1 + b.phase) * 0.015;
+      const spec = BOATS[b.kind];
+      // heavy boats swing round slowly; small ones follow the line closely
+      b.yaw += dt ? d * Math.min(1, dt * (0.6 + spec.response * 1.6)) : d;
+      // a small heel into turns + gentle rocking; fast boats lift the bow
+      b.roll = -d * (spec.length < 15 ? 0.5 : 0.25) + Math.sin(this.time * 1.1 + b.phase) * (spec.length < 15 ? 0.03 : 0.012);
+      b.pitch = -(b.v / 7) * (b.kind === "speedboat" ? 0.09 : 0.015) + Math.sin(this.time * 0.9 + b.phase * 2) * 0.008;
       b.x = p.x;
       b.z = p.z;
-      b.y = 0.05 + Math.sin(this.time * 1.3 + b.phase) * 0.06;
+      b.y = 0.05 + Math.sin(this.time * 1.3 + b.phase) * (spec.length < 15 ? 0.08 : 0.04);
     }
   }
+}
+
+/** Wakes drawn by the water shader: per boat x, z, heading, strength(speed); and length, beam. */
+export const MAX_WAKES = 40;
+export function writeWakes(boats: Boat[], a: Float32Array, b: Float32Array) {
+  let n = 0;
+  for (const boat of boats) {
+    if (n >= MAX_WAKES) break;
+    const spec = BOATS[boat.kind];
+    a.set([boat.x, boat.z, boat.yaw, spec.wake * Math.min(1, boat.v / 2.5)], n * 4);
+    b.set([spec.length, spec.beam, boat.v, 0], n * 4);
+    n++;
+  }
+  return n;
 }

@@ -13,24 +13,39 @@ import { AmbientCreatureSimulation, PedestrianSimulation } from "@/lib/sim/life"
 import { addLimbAttributes, limbMaterial } from "@/lib/sim/materials";
 import { birdGeometry, boatModels, personGeometry, petGeometry, vehicleModels, waderGeometry, wheelGeometry, type BoatKind, type Model, type VehicleKind } from "@/lib/sim/models";
 import { TrafficSimulation } from "@/lib/sim/traffic";
-import { WaterTrafficSimulation } from "@/lib/sim/water";
+import { WaterTrafficSimulation, writeWakes } from "@/lib/sim/water";
+import { makeLightsMaterial, waterUniforms } from "@/lib/city/waterMaterial";
 import type { Quality } from "@/lib/store/settings";
 
 /** Body colours by vehicle type (Saigon-ish: green buses, white/green/yellow taxis, lots of colourful bikes). */
+const BIKES = ["#e63946", "#1d3557", "#f1faee", "#2a9d8f", "#f4a261", "#264653", "#ffb703", "#8338ec", "#f2f2f2", "#9aa0a6", "#f4acb7", "#a8dadc"];
+const CARS = ["#f8f9fa", "#212529", "#adb5bd", "#c1121f", "#1d4ed8", "#6c757d", "#e9ecef", "#7f5539", "#9fc1c0", "#e9c46a"];
 const PAINT: Record<VehicleKind, string[]> = {
-  motorbike: ["#e63946", "#1d3557", "#f1faee", "#2a9d8f", "#f4a261", "#264653", "#ffb703", "#8338ec"],
-  scooter: ["#ffffff", "#e9c46a", "#e76f51", "#90be6d", "#457b9d", "#f28482", "#b5838d"],
+  motorbike: BIKES,
+  scooter: ["#ffffff", "#e9c46a", "#e76f51", "#90be6d", "#457b9d", "#f28482", "#b5838d", "#cdb4db", "#bde0fe"],
+  delivery: ["#2fae66", "#ef8a17", "#d62828", "#264653"],
+  pillion: BIKES,
+  ebike: ["#ffffff", "#bde0fe", "#ffc8dd", "#caffbf", "#9bf6ff", "#adb5bd"],
   bicycle: ["#3a86ff", "#ff006e", "#fb5607", "#8ac926"],
-  car: ["#f8f9fa", "#212529", "#adb5bd", "#c1121f", "#1d4ed8", "#6c757d", "#e9ecef", "#7f5539"],
+  car: CARS,
+  hatchback: ["#e63946", "#f1faee", "#ffb703", "#457b9d", "#adb5bd", "#90be6d"],
+  suv: ["#212529", "#f8f9fa", "#6c757d", "#3d5a80", "#7f5539"],
+  pickup: ["#f8f9fa", "#6c757d", "#c1121f", "#2b2d42"],
+  ev: ["#2a9d8f", "#f8f9fa", "#3a86ff", "#e9c46a", "#1d3557"],
   taxi: ["#ffffff", "#2d9d58", "#f6c90e"],
   van: ["#ffffff", "#e5e5e5", "#3d5a80", "#ee6c4d"],
+  minibus: ["#f8f9fa", "#e9c46a", "#2a9d8f"],
+  minitruck: ["#1d4ed8", "#f8f9fa", "#2b9348"],
   bus: ["#2e8b57", "#3c9d5d"],
   truck: ["#1d4ed8", "#c1121f", "#f8f9fa", "#2b9348"],
 };
 const BOAT_PAINT: Record<BoatKind, string[]> = {
   tour: ["#1d4ed8", "#c1121f", "#0f766e"],
+  glasstour: ["#f8f9fa", "#0f766e", "#1d3557"],
   ferry: ["#f59e0b", "#1e40af"],
   barge: ["#475569", "#7c2d12", "#334155"],
+  cargo: ["#1d3557", "#7c2d12", "#2b2d42"],
+  tug: ["#c1121f", "#f59e0b", "#1d4ed8"],
   boat: ["#2563eb", "#16a34a", "#b45309"],
   speedboat: ["#ef4444", "#f8fafc", "#0ea5e9"],
 };
@@ -71,9 +86,8 @@ function ModelPair({ model, count, colors, seed, onMeshes, shadows }: { model: M
       <instancedMesh ref={paint} args={[model.paint, undefined, count]} frustumCulled={false} castShadow={shadows}>
         <meshStandardMaterial vertexColors roughness={0.45} metalness={0.15} />
       </instancedMesh>
-      <instancedMesh ref={trim} args={[model.trim, undefined, count]} frustumCulled={false}>
-        <meshStandardMaterial vertexColors roughness={0.5} />
-      </instancedMesh>
+      {/* trim: headlights / tail lights glow at night */}
+      <instancedMesh ref={trim} args={[model.trim, LIGHTS_MAT, count]} frustumCulled={false} />
     </>
   );
 }
@@ -133,11 +147,15 @@ export function LivingCity({ city, quality, controls, extraSpaces, shadows }: Pr
     });
     return m;
   }, [water]);
+  const paints = useMemo(
+    () => Object.fromEntries(Object.entries(PAINT).map(([k, list]) => [k, list.map((c) => new THREE.Color(c))])) as Record<VehicleKind, THREE.Color[]>,
+    [],
+  );
   const wheelCount = useMemo(() => traffic.vehicles.reduce((a, v) => a + vModels[v.kind].wheels.length, 0), [traffic, vModels]);
 
   const vMeshes = useMemo(() => new Map<string, [THREE.InstancedMesh | null, THREE.InstancedMesh | null]>(), []);
   const wheels = useRef<THREE.InstancedMesh>(null);
-  const wakes = useRef<THREE.InstancedMesh>(null);
+  const beams = useRef<THREE.InstancedMesh>(null);
 
   /* ---- people / pets / birds meshes with limb animation ---- */
   const personGeo = useMemo(() => personGeometry(), []);
@@ -152,7 +170,6 @@ export function LivingCity({ city, quality, controls, extraSpaces, shadows }: Pr
       pet: limbMaterial({ mode: "walk", freq: 12, amp: 0.7, time }),
       wing: limbMaterial({ mode: "wing", freq: 11, amp: 0.7, time }),
       still: limbMaterial({ mode: "walk", freq: 2, amp: 0, time }),
-      wake: new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.35, depthWrite: false }),
     }),
     [time],
   );
@@ -203,6 +220,7 @@ export function LivingCity({ city, quality, controls, extraSpaces, shadows }: Pr
     [geos, mats, wheelGeo, vModels, bModels],
   );
 
+
   // vehicles that leave the map re-enter only where the camera can't see
   const { camera } = useThree();
   const frustum = useMemo(() => new THREE.Frustum(), []);
@@ -210,39 +228,78 @@ export function LivingCity({ city, quality, controls, extraSpaces, shadows }: Pr
     const pt = new THREE.Vector3();
     traffic.isVisible = (x, z) => frustum.containsPoint(pt.set(x, 1, z));
   }, [traffic, frustum]);
+  // "near the view": inside the frustum with a 40 m margin (vehicles move < 1 m between refreshes)
+  const near = useMemo(() => {
+    const sphere = new THREE.Sphere(new THREE.Vector3(), 40);
+    return (x: number, z: number) => frustum.intersectsSphere((sphere.center.set(x, 2, z), sphere));
+  }, [frustum]);
+
+  useEffect(() => {
+    // dev hook for the headless QA scripts (framing shots on real traffic)
+    if (process.env.NODE_ENV === "production") return;
+    const w = window as unknown as { __sg3dMap?: Record<string, unknown> };
+    w.__sg3dMap = Object.assign(w.__sg3dMap ?? {}, { traffic, water, near, vMeshes });
+  }, [traffic, water, near, vMeshes]);
 
   /* ---- the single update loop (SimulationLOD) ---- */
   useFrame((state, dt) => {
     time.value = state.clock.elapsedTime;
     frustum.setFromProjectionMatrix(M4.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
     const camDist = controls.current?.distance ?? 1000;
-    traffic.update(dt);
-    traffic.pose();
+    traffic.step(dt);
+    // SimulationLOD: poses (and instance matrices) only refreshed near the view; see TrafficSimulation.pose
+    traffic.pose(0.35, Math.min(dt, 0.1), near);
     water.update(dt);
     water.pose(dt);
+    // wakes are drawn by the water shader from the boats' poses
+    waterUniforms.uWakeN.value = camDist < SIM_LOD.wakes ? writeWakes(water.boats, waterUniforms.uWakeA.value, waterUniforms.uWakeB.value) : 0;
     const showPeople = camDist < SIM_LOD.people;
     const showGround = camDist < SIM_LOD.creaturesGround;
     if (showPeople) people.update(dt);
     creatures.update(dt);
 
-    // vehicles
+    const farMask = camDist > 3000 ? 3 : camDist > 1800 ? 1 : 0;
+    // headlight beams on the road (night only, vehicles in view and not too far)
+    const night = waterUniforms.uNight.value > 0.5 && camDist < 2200;
+    let nb = 0;
+    // vehicles: only those in view are packed into the instance buffers (count = visible),
+    // each keeping its own paint colour wherever it lands in the buffer
     for (const [kind, idx] of vKinds) {
       const meshes = vMeshes.get(`v:${kind}`);
       if (!meshes) continue;
-      idx.forEach((vi, k) => {
+      const pal = paints[kind];
+      let k = 0;
+      for (const vi of idx) {
         const v = traffic.vehicles[vi];
-        compose(M4, v.x, v.y + 0.02, v.z, v.yaw);
+        // LOD: from far away a fixed subset reads as the same flows (half past 1.8 km, a quarter past 3 km)
+        if (!v.fresh || !near(v.x, v.z) || (vi & farMask) !== 0) continue;
+        compose(M4, v.x, v.y + 0.02, v.z, v.yaw, 0, v.lean);
         meshes[0]?.setMatrixAt(k, M4);
         meshes[1]?.setMatrixAt(k, M4);
-      });
-      for (const m of meshes) if (m) m.instanceMatrix.needsUpdate = true;
+        meshes[0]?.setColorAt(k, pal[(vi * 2654435761 >>> 0) % pal.length]);
+        k++;
+        if (night && beams.current && nb < BEAM_MAX) {
+          const big = v.spec.length > 2.5;
+          M4b.makeScale(big ? 1 : 0.45, 1, big ? 1 : 0.55);
+          M4b.setPosition(0, 0.06 - (v.y + 0.02), v.spec.length / 2);
+          beams.current.setMatrixAt(nb++, M4b.premultiply(compose(M4, v.x, v.y + 0.02, v.z, v.yaw)));
+        }
+      }
+      for (const m of meshes) if (m) { m.count = k; m.instanceMatrix.needsUpdate = true; }
+      if (meshes[0]?.instanceColor) meshes[0].instanceColor.needsUpdate = true;
+    }
+    if (beams.current) {
+      beams.current.count = nb;
+      beams.current.visible = nb > 0;
+      beams.current.instanceMatrix.needsUpdate = true;
     }
     if (wheels.current) {
       wheels.current.visible = camDist < SIM_LOD.wheels;
       if (wheels.current.visible) {
         let w = 0;
         for (const v of traffic.vehicles) {
-          compose(M4, v.x, v.y + 0.02, v.z, v.yaw);
+          if (!v.fresh || !near(v.x, v.z)) continue;
+          compose(M4, v.x, v.y + 0.02, v.z, v.yaw, 0, v.lean);
           for (const [x, y, z, r, wd] of vModels[v.kind].wheels) {
             M4b.makeRotationX(v.wheel / r);
             M4b.scale(S.set(wd, r, r));
@@ -250,31 +307,20 @@ export function LivingCity({ city, quality, controls, extraSpaces, shadows }: Pr
             wheels.current.setMatrixAt(w++, M4b.premultiply(M4));
           }
         }
+        wheels.current.count = w;
         wheels.current.instanceMatrix.needsUpdate = true;
       }
     }
-    // boats + wakes
-    let wi = 0;
+    // boats
     for (const [kind, idx] of bKinds) {
       const meshes = vMeshes.get(`b:${kind}`);
       idx.forEach((bi, k) => {
         const b = water.boats[bi];
-        compose(M4, b.x, b.y, b.z, b.yaw, 0, b.roll);
+        compose(M4, b.x, b.y, b.z, b.yaw, b.pitch, b.roll);
         meshes?.[0]?.setMatrixAt(k, M4);
         meshes?.[1]?.setMatrixAt(k, M4);
-        if (wakes.current) {
-          const len = Math.max(4, b.v * 6);
-          M4b.makeRotationX(-Math.PI / 2);
-          M4b.scale(S.set(Math.min(8, 2 + b.v), len, 1));
-          M4b.setPosition(0, 0.1 - b.y, -(BOATLEN[b.kind] / 2 + len / 2));
-          wakes.current.setMatrixAt(wi++, M4b.premultiply(M4));
-        }
       });
       for (const m of meshes ?? []) if (m) m.instanceMatrix.needsUpdate = true;
-    }
-    if (wakes.current) {
-      wakes.current.instanceMatrix.needsUpdate = true;
-      wakes.current.visible = camDist < SIM_LOD.wakes;
     }
     // people & pets
     const pa = attrs.current.get("people");
@@ -341,13 +387,13 @@ export function LivingCity({ city, quality, controls, extraSpaces, shadows }: Pr
       {[...vKinds].map(([kind, idx]) => (
         <ModelPair key={`v:${kind}`} model={vModels[kind]} count={idx.length} colors={PAINT[kind]} seed={kind.length * 31} onMeshes={register(`v:${kind}`)} shadows={shadows} />
       ))}
+      <instancedMesh ref={beams} args={[BEAM_GEO, BEAM_MAT, BEAM_MAX]} frustumCulled={false} renderOrder={19} visible={false} />
       <instancedMesh ref={wheels} args={[wheelGeo, undefined, Math.max(1, wheelCount)]} frustumCulled={false}>
         <meshStandardMaterial vertexColors roughness={0.8} />
       </instancedMesh>
       {[...bKinds].map(([kind, idx]) => (
         <ModelPair key={`b:${kind}`} model={bModels[kind]} count={idx.length} colors={BOAT_PAINT[kind]} seed={kind.length * 17} onMeshes={register(`b:${kind}`)} shadows={shadows} />
       ))}
-      <instancedMesh ref={wakes} args={[WAKE_GEO, mats.wake, Math.max(1, water.boats.length)]} frustumCulled={false} renderOrder={20} />
       <instancedMesh ref={peopleMesh} args={[geos.person, mats.walk, Math.max(1, people.people.length)]} frustumCulled={false} castShadow={false} />
       <instancedMesh ref={dogMesh} args={[geos.dog, mats.pet, Math.max(1, dogs.length)]} frustumCulled={false} />
       <instancedMesh ref={catMesh} args={[geos.cat, mats.still, Math.max(1, cats.length)]} frustumCulled={false} />
@@ -358,14 +404,23 @@ export function LivingCity({ city, quality, controls, extraSpaces, shadows }: Pr
   );
 }
 
-const BOATLEN: Record<BoatKind, number> = { tour: 26, ferry: 18, barge: 40, boat: 7, speedboat: 8 };
+/** Shared trim material of every vehicle and boat (lights glow at night). */
+const LIGHTS_MAT = makeLightsMaterial();
 
-/** Wake: a V-shaped fan that fades out behind the boat. */
-const WAKE_GEO = (() => {
-  const g = new THREE.BufferGeometry();
-  // unit triangle pointing +y (forward after the -90° x rotation), widest at the back
-  const v = new Float32Array([0, 0.5, 0, -0.5, -0.5, 0, 0.5, -0.5, 0, 0, 0.5, 0, 0.5, -0.5, 0, -0.5, -0.5, 0]);
-  g.setAttribute("position", new THREE.BufferAttribute(v, 3));
-  g.computeVertexNormals();
+/** Headlight beams: a warm additive fan on the road ahead of each vehicle (night only). */
+const BEAM_MAX = 3000;
+const BEAM_GEO = (() => {
+  const g = new THREE.PlaneGeometry(3.6, 11, 1, 4);
+  g.rotateX(-Math.PI / 2);
+  g.translate(0, 0, 5.5); // starts at the vehicle's nose, reaches 11 m ahead
   return g;
 })();
+const BEAM_MAT = new THREE.ShaderMaterial({
+  transparent: true,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending,
+  vertexShader:
+    "varying vec2 vP; void main(){ vP = position.xz; gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0); }",
+  fragmentShader:
+    "varying vec2 vP; void main(){ float along = clamp(vP.y / 11.0, 0.0, 1.0); float spread = 0.5 + along * 1.3; float a = (1.0 - along) * smoothstep(spread, 0.0, abs(vP.x)) * 0.32; gl_FragColor = vec4(vec3(1.0, 0.86, 0.62) * a, 1.0); }",
+});

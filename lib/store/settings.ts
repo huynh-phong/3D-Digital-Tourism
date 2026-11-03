@@ -67,7 +67,8 @@ export const useSettings = create<SettingsState>()(
   persist(
     (set, get) => ({
       lang: "vi",
-      theme: "system",
+      // the map opens in daylight; dark is an explicit choice
+      theme: "light",
       quality: "medium",
       voiceEnabled: true,
       voiceMode: "cloud",

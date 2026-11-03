@@ -17,16 +17,16 @@ export function Button({
   ...rest
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; icon?: IconName; size?: "sm" | "md" | "lg" }) {
   const v = {
-    primary: "bg-accent text-on-accent hover:bg-accent-strong shadow-sm",
-    soft: "bg-surface-2 text-fg hover:bg-accent-soft border border-line",
-    ghost: "text-fg hover:bg-accent-soft",
-    outline: "border border-line text-fg hover:bg-accent-soft",
+    primary: "btn-game bg-accent text-on-accent hover:bg-accent-strong",
+    soft: "btn-game bg-surface-solid text-fg hover:bg-mint",
+    ghost: "rounded-[10px] text-fg hover:bg-accent-soft",
+    outline: "btn-game bg-transparent text-fg hover:bg-mint",
   }[variant];
   const s = { sm: "h-8 px-2.5 text-xs gap-1.5", md: "h-10 px-3.5 text-sm gap-2", lg: "h-12 px-5 text-base gap-2.5" }[size];
   return (
     <button
       type="button"
-      className={`inline-flex items-center justify-center rounded-xl font-medium transition-colors duration-150 disabled:opacity-50 disabled:pointer-events-none ${v} ${s} ${className}`}
+      className={`inline-flex items-center justify-center font-bold disabled:opacity-50 disabled:pointer-events-none ${v} ${s} ${className}`}
       {...rest}
     >
       {icon && <Icon name={icon} size={size === "sm" ? 15 : 18} />}
@@ -48,8 +48,8 @@ export function IconButton({
       aria-label={label}
       title={label}
       aria-pressed={active}
-      className={`inline-flex h-10 w-10 items-center justify-center rounded-xl border border-line transition-colors duration-150 ${
-        active ? "bg-accent text-on-accent" : "bg-surface-2 text-fg hover:bg-accent-soft"
+      className={`btn-game inline-flex h-10 w-10 shrink-0 items-center justify-center ${
+        active ? "bg-accent text-on-accent" : "bg-surface-solid text-fg hover:bg-mint"
       } ${className}`}
       {...rest}
     >
@@ -68,7 +68,7 @@ export function StatusBadge({ status }: { status: ConfidenceStatus }) {
     simulated: { cls: "bg-surface-2 text-muted border border-line", icon: "layers" as const, label: t.common.simulated },
   }[status];
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${cfg.cls}`}>
+    <span className={`chip ${cfg.cls}`}>
       <Icon name={cfg.icon} size={12} />
       {cfg.label}
     </span>
@@ -111,7 +111,7 @@ export function Modal({
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(43,36,29,0.42)] p-4"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -122,14 +122,14 @@ export function Modal({
             role="dialog"
             aria-modal="true"
             aria-label={title}
-            className={`panel flex max-h-[88vh] w-full flex-col overflow-hidden ${wide ? "max-w-3xl" : "max-w-lg"}`}
+            className={`panel panel-modal flex max-h-[88vh] w-full flex-col overflow-hidden ${wide ? "max-w-3xl" : "max-w-lg"}`}
             initial={{ y: 16, scale: 0.98, opacity: 0 }}
             animate={{ y: 0, scale: 1, opacity: 1 }}
             exit={{ y: 10, opacity: 0 }}
             transition={{ duration: 0.18 }}
           >
-            <div className="flex items-center justify-between border-b border-line px-5 py-3">
-              <h2 className="text-base font-semibold">{title}</h2>
+            <div className="flex items-center justify-between border-b-2 border-ink px-5 py-3.5">
+              <h2 className="title-game text-xl">{title}</h2>
               <IconButton icon="close" label={t.common.close} onClick={onClose} />
             </div>
             <div className="scroll-thin overflow-y-auto px-5 py-4">{children}</div>
@@ -152,7 +152,7 @@ export function Segmented<T extends string>({
   label: string;
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className="inline-flex rounded-xl border border-line bg-surface-2 p-0.5">
+    <div role="radiogroup" aria-label={label} className="inline-flex overflow-hidden rounded-[10px] border-2 border-ink bg-surface-solid shadow-[var(--shadow-btn)]">
       {options.map((o) => (
         <button
           key={o.value}
@@ -160,8 +160,8 @@ export function Segmented<T extends string>({
           role="radio"
           aria-checked={value === o.value}
           onClick={() => onChange(o.value)}
-          className={`rounded-[10px] px-3 py-1.5 text-xs font-semibold transition-colors ${
-            value === o.value ? "bg-accent text-on-accent" : "text-muted hover:text-fg"
+          className={`px-3.5 py-1.5 text-xs font-bold transition-colors [&+&]:border-l-2 [&+&]:border-ink ${
+            value === o.value ? "bg-accent text-on-accent" : "text-fg hover:bg-mint"
           }`}
         >
           {o.label}
@@ -181,10 +181,10 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
         aria-checked={checked}
         aria-label={label}
         onClick={() => onChange(!checked)}
-        className={`relative h-6 w-11 rounded-full transition-colors ${checked ? "bg-accent" : "bg-bg-2 border border-line"}`}
+        className={`relative h-7 w-12 shrink-0 rounded-full border-2 border-ink transition-colors ${checked ? "bg-accent" : "bg-bg-2"}`}
       >
         <span
-          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-5" : "translate-x-0.5"}`}
+          className={`absolute top-[2px] left-0 h-[18px] w-[18px] rounded-full border-2 border-ink bg-surface-solid transition-transform ${checked ? "translate-x-[24px]" : "translate-x-[2px]"}`}
         />
       </button>
     </label>

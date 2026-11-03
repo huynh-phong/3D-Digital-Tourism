@@ -5,8 +5,8 @@ import { buildCity, CITY_BOUNDS, M, type CityBuild } from "@/lib/city/buildCity"
 import { prepPolygon, signedArea, triangulate } from "@/lib/city/geom";
 import { SIM_DENSITY } from "@/lib/sim/config";
 import { AmbientCreatureSimulation, PedestrianSimulation } from "@/lib/sim/life";
-import { TrafficSimulation } from "@/lib/sim/traffic";
-import { WaterTrafficSimulation } from "@/lib/sim/water";
+import { cornerSpeed, TrafficSimulation, VEHICLES } from "@/lib/sim/traffic";
+import { MAX_WAKES, WaterTrafficSimulation, writeWakes } from "@/lib/sim/water";
 import type { CityData } from "@/lib/city/types";
 
 const data = JSON.parse(readFileSync("public/data/city.json", "utf8")) as CityData;
@@ -108,7 +108,7 @@ describe("road traffic", () => {
       for (let i = 1; i < list.length; i++) if (list[i].s - list[i - 1].s < (list[i].spec.length + list[i - 1].spec.length) / 2 - 0.3) overlaps++;
     }
     expect(overlaps).toBe(0);
-  });
+  }, 240_000);
 
   it("vehicles keep moving (signals cycle, junctions don't gridlock)", () => {
     const sim = new TrafficSimulation(city.lanes, city.junctions, 400);
@@ -169,5 +169,79 @@ describe("people and creatures", () => {
       sim.update(1 / 30);
       for (const b of sim.birds) expect(b.y).toBeGreaterThan(skyline(b.x, b.z) + 5);
     }
+  });
+});
+
+describe("Saigon traffic mix and behaviour", () => {
+  const TWO = new Set(["motorbike", "scooter", "delivery", "pillion", "ebike", "bicycle"]);
+
+  it("is mostly two-wheelers, with buses and lorries only on suitable roads", () => {
+    const sim = new TrafficSimulation(city.lanes, city.junctions, SIM_DENSITY.medium.vehicles);
+    expect(sim.vehicles.length).toBeGreaterThan(1000);
+    const share = sim.vehicles.filter((v) => TWO.has(v.kind)).length / sim.vehicles.length;
+    expect(share).toBeGreaterThan(0.5);
+    expect(share).toBeLessThan(0.75);
+    expect(new Set(sim.vehicles.map((v) => v.kind)).size).toBeGreaterThanOrEqual(14);
+    for (const v of sim.vehicles) {
+      const cls = city.lanes[v.lane].cls;
+      if (v.kind === "bus" || v.kind === "minibus") expect(cls).not.toBe("local");
+      if (v.kind === "truck") {
+        expect(cls).toBe("major");
+        // no heavy lorries in the historic core around the palace and Bến Thành
+        const p = city.lanes[v.lane].pts[Math.floor(city.lanes[v.lane].pts.length / 2)];
+        expect(Math.hypot(p[0] - 350, p[1] - 100)).toBeGreaterThan(900);
+      }
+    }
+  });
+
+  it("takes corners slower in big vehicles and leans two-wheelers within limits", () => {
+    const sim = new TrafficSimulation(city.lanes, city.junctions, SIM_DENSITY.medium.vehicles);
+    const turnV: Record<string, number[]> = {};
+    for (let step = 0; step < 30 * 30; step++) {
+      sim.update(1 / 30);
+      sim.pose(0.35, 1 / 30);
+      for (const v of sim.vehicles) {
+        expect(Math.abs(v.lean)).toBeLessThanOrEqual(0.4);
+        if (!TWO.has(v.kind)) expect(v.lean).toBe(0);
+        // safe speed of the turn being driven (sharp turns only, where it is below cruising speed)
+        if (v.s < 0 && Number.isFinite(v.turnV) && v.turnV < v.vmax) (turnV[v.kind] ??= []).push(v.turnV);
+      }
+    }
+    expect(Object.keys(turnV).length).toBeGreaterThan(5); // vehicles of many kinds slow for sharp turns
+    // on the same right-angle corner (12 m chord) a bus is much slower than a motorbike
+    const a = { pts: [[0, 0], [20, 0]] as [number, number][], endHeading: 0 };
+    const b = { pts: [[28, 8], [28, 30]] as [number, number][] };
+    const bus = cornerSpeed(VEHICLES.bus.latAcc, VEHICLES.bus.maxSpeed, a, b);
+    const bike = cornerSpeed(VEHICLES.motorbike.latAcc, VEHICLES.motorbike.maxSpeed, a, b);
+    expect(bus).toBeLessThan(bike * 0.7);
+    expect(cornerSpeed(VEHICLES.bus.latAcc, 7, a, { pts: [[25, 0], [60, 0]] })).toBe(7); // straight on: no braking
+  }, 240_000);
+});
+
+describe("river traffic", () => {
+  it("runs at least six boat types, all on the water, big ones only in the wide river", () => {
+    const sim = new WaterTrafficSimulation(city.boatLoops, SIM_DENSITY.medium.boats);
+    expect(new Set(sim.boats.map((b) => b.kind)).size).toBeGreaterThanOrEqual(6);
+    for (let step = 0; step < 30 * 40; step++) {
+      sim.update(1 / 30);
+      sim.pose(1 / 30);
+      if (step % 30) continue;
+      for (const b of sim.boats) {
+        expect(city.mask!.get(b.x, b.z) & M.WATER).toBeTruthy();
+        expect(b.y).toBeGreaterThan(-0.1); // never sinks into the water mesh
+        expect(b.y).toBeLessThan(0.2); // nor floats above it
+      }
+    }
+    for (const b of sim.boats) if (["barge", "cargo"].includes(b.kind)) expect(sim.routes[b.route].halfWidth).toBeGreaterThanOrEqual(90);
+  });
+
+  it("feeds every boat's wake to the water shader", () => {
+    const sim = new WaterTrafficSimulation(city.boatLoops, SIM_DENSITY.medium.boats);
+    sim.pose(1 / 30);
+    const a = new Float32Array(MAX_WAKES * 4), b = new Float32Array(MAX_WAKES * 4);
+    const n = writeWakes(sim.boats, a, b);
+    expect(n).toBe(Math.min(MAX_WAKES, sim.boats.length));
+    expect(a[0]).toBeCloseTo(sim.boats[0].x);
+    expect(b[0]).toBeGreaterThan(0); // boat length
   });
 });

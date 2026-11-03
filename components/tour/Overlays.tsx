@@ -9,7 +9,7 @@ import { keyLabel, useSettings } from "@/lib/store/settings";
 import { setMode } from "@/lib/tour/director";
 import { narrator } from "@/lib/audio/narrator";
 import { Icon } from "@/components/ui/Icon";
-import { Button } from "@/components/ui/primitives";
+import { Button, IconButton } from "@/components/ui/primitives";
 import { SettingsBody } from "@/components/ui/SettingsDialog";
 import { GuideAvatar } from "@/components/guide/GuideCard";
 
@@ -20,12 +20,12 @@ export function ModeChooser({ onStart }: { onStart: () => void }) {
   return (
     <AnimatePresence>
       {phase === "choose" && (
-        <motion.div className="pointer-events-auto absolute inset-0 z-40 flex items-end justify-center bg-black/20 p-4 sm:items-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-          <motion.div className="panel w-full max-w-xl p-5" initial={{ y: 20 }} animate={{ y: 0 }} role="dialog" aria-label={t.tour.chooseMode}>
+        <motion.div className="pointer-events-auto absolute inset-0 z-40 flex items-end justify-center bg-[rgba(43,36,29,0.3)] p-4 sm:items-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <motion.div className="panel panel-modal w-full max-w-xl p-5" initial={{ y: 20 }} animate={{ y: 0 }} role="dialog" aria-label={t.tour.chooseMode}>
             <div className="mb-3 flex items-center gap-3">
               <GuideAvatar speaking={false} />
               <div>
-                <p className="text-base font-bold">{t.tour.chooseMode}</p>
+                <p className="title-game text-xl">{t.tour.chooseMode}</p>
                 <p className="text-xs text-muted">{t.guide.name} · {t.guide.role}</p>
               </div>
             </div>
@@ -39,12 +39,12 @@ export function ModeChooser({ onStart }: { onStart: () => void }) {
                     setMode(m);
                     onStart();
                   }}
-                  className="rounded-xl border border-line bg-surface-2 p-4 text-left transition-colors hover:border-[var(--accent)] hover:bg-accent-soft"
+                  className={`btn-game p-4 text-left ${m === "guided" ? "bg-accent text-on-accent hover:bg-accent-strong [&_.desc]:text-on-accent/85" : "bg-surface-solid hover:bg-mint"}`}
                 >
-                  <span className="mb-1 flex items-center gap-2 font-semibold">
+                  <span className="mb-1 flex items-center gap-2 text-[15px] font-extrabold">
                     <Icon name={m === "guided" ? "user" : "map"} /> {m === "guided" ? t.tour.guided : t.tour.free}
                   </span>
-                  <span className="text-[13px] text-muted">{m === "guided" ? t.tour.modeGuidedDesc : t.tour.modeFreeDesc}</span>
+                  <span className={`desc text-[13px] ${m === "guided" ? "" : "text-muted"}`}>{m === "guided" ? t.tour.modeGuidedDesc : t.tour.modeFreeDesc}</span>
                 </button>
               ))}
             </div>
@@ -95,7 +95,7 @@ export function PauseMenu({ onResume }: { onResume: () => void }) {
   return (
     <AnimatePresence>
       {phase === "paused" && (
-        <motion.div className="pointer-events-auto absolute inset-0 z-40 flex items-center justify-center bg-black/35 p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+        <motion.div className="pointer-events-auto absolute inset-0 z-40 flex items-center justify-center bg-[rgba(43,36,29,0.42)] p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
           <PauseBody onResume={onResume} />
         </motion.div>
       )}
@@ -109,16 +109,26 @@ function PauseBody({ onResume }: { onResume: () => void }) {
   const mode = useGame((s) => s.mode);
   const [tab, setTab] = useState<"menu" | "settings" | "help">("menu");
   return (
-    <div className="panel flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden" role="dialog" aria-label={t.tour.paused}>
-      <div className="flex items-center gap-2 border-b border-line px-4 py-3">
-        <h2 className="flex-1 text-base font-bold">{t.tour.paused}</h2>
+    <div className="panel panel-modal flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden" role="dialog" aria-label={t.tour.paused}>
+      <div className="flex items-center gap-2 border-b-2 border-ink px-5 py-3.5">
+        <h2 className="title-game flex-1 text-2xl">{t.tour.paused}</h2>
+        <IconButton icon="close" label={t.tour.resume} onClick={onResume} />
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
+      <nav aria-label={t.tour.paused} className="flex shrink-0 gap-1.5 border-b-2 border-ink p-3 sm:w-48 sm:flex-col sm:border-b-0 sm:border-r-2">
         {(["menu", "settings", "help"] as const).map((x) => (
-          <button key={x} type="button" onClick={() => setTab(x)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${tab === x ? "bg-accent text-on-accent" : "text-muted hover:text-fg"}`}>
+          <button
+            key={x}
+            type="button"
+            onClick={() => setTab(x)}
+            aria-current={tab === x}
+            className={`rounded-[10px] border-2 px-3 py-2 text-left text-sm font-bold ${tab === x ? "border-ink bg-accent text-on-accent shadow-[var(--shadow-btn)]" : "border-transparent hover:bg-surface-2"}`}
+          >
             {x === "menu" ? t.tour.paused : x === "settings" ? t.common.settings : t.common.help}
           </button>
         ))}
-      </div>
-      <div className="scroll-thin overflow-y-auto p-4">
+      </nav>
+      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto p-4">
         {tab === "menu" && (
           <div className="grid gap-2">
             <Button variant="primary" size="lg" icon="play" onClick={onResume} autoFocus>{t.tour.resume}</Button>
@@ -128,7 +138,7 @@ function PauseBody({ onResume }: { onResume: () => void }) {
             </div>
             <Button icon="layers" onClick={() => useGame.setState({ mapOpen: true })}>{t.tour.floorMap}</Button>
             <Button icon="reset" onClick={() => { narrator?.stop(); useGame.getState().restart(); }}>{t.tour.restart}</Button>
-            <Link href="/" onClick={() => narrator?.stop()} className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-line text-sm font-medium hover:bg-accent-soft">
+            <Link href="/" onClick={() => narrator?.stop()} className="btn-game inline-flex h-12 items-center justify-center gap-2 bg-surface-solid text-sm font-bold hover:bg-mint">
               <Icon name="home" /> {t.tour.backToMap}
             </Link>
             <Link href="/sources" className="text-center text-xs text-muted underline">{t.common.sources}</Link>
@@ -136,6 +146,7 @@ function PauseBody({ onResume }: { onResume: () => void }) {
         )}
         {tab === "settings" && <SettingsBody />}
         {tab === "help" && <ControlsGrid />}
+      </div>
       </div>
     </div>
   );

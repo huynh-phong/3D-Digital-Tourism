@@ -255,7 +255,7 @@ export function GuideCard({ chatRef }: { chatRef: React.RefObject<HTMLInputEleme
           }}
           placeholder={t.guide.askPlaceholder}
           aria-label={t.guide.askPlaceholder}
-          className="h-10 min-w-0 flex-1 rounded-xl border border-line bg-surface-solid px-3 text-sm outline-none focus:border-[var(--accent)]"
+          className="h-10 min-w-0 flex-1 rounded-[10px] border-2 border-ink bg-surface-solid px-3 text-sm outline-none focus:border-[var(--accent)]"
         />
         <button type="submit" disabled={busy || !q.trim()} aria-label={t.guide.send} className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-on-accent disabled:opacity-50">
           <Icon name="send" />

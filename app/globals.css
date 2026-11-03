@@ -1,51 +1,74 @@
 @import "tailwindcss";
 
-/* Design tokens — light (ivory, green/blue accents from the city's parks & river). */
+/*
+ * Design tokens — "miniature city" game UI: cream panels, dark-brown ink
+ * borders, offset hard shadows, teal primary, mustard and brick accents.
+ * All screens use these variables (no colours hard-coded in components).
+ */
 :root {
-  --bg: #f6f3ec;
-  --bg-2: #ece7dc;
-  --surface: rgba(255, 253, 248, 0.88);
-  --surface-solid: #fffdf8;
-  --surface-2: rgba(240, 236, 226, 0.92);
-  --text: #18221d;
-  --muted: #56625b;
-  --border: rgba(24, 40, 32, 0.14);
-  --accent: #17834f;
-  --accent-strong: #0f6b3f;
+  --bg: #f5e9d4;
+  --bg-2: #ecdcbf;
+  --surface: #fff4df;
+  --surface-solid: #fff4df;
+  --surface-2: #f7ead2;
+  --mint: #dcefe4;
+  --text: #2b241d;
+  --muted: #6b5d4c;
+  /* thin separators inside panels */
+  --border: rgba(43, 36, 29, 0.2);
+  /* thick outlines of panels, buttons, chips */
+  --ink: #2b241d;
+  --accent: #0f7f76;
+  --accent-strong: #0a6a62;
   --accent-contrast: #ffffff;
-  --accent-soft: rgba(23, 131, 79, 0.12);
-  --blue: #1f5fd6;
-  --blue-soft: rgba(31, 95, 214, 0.12);
-  --amber: #a15c07;
-  --amber-soft: rgba(161, 92, 7, 0.12);
-  --danger: #b42318;
-  --shadow: 0 10px 30px rgba(30, 40, 30, 0.14), 0 2px 6px rgba(30, 40, 30, 0.08);
-  --focus: #1f5fd6;
-  --sky-top: #9ec9ef;
-  --sky-bottom: #f3ead8;
+  --accent-soft: rgba(15, 127, 118, 0.14);
+  --mustard: #ddb85e;
+  --brick: #b94537;
+  --blue: #2f6fb0;
+  --blue-soft: rgba(47, 111, 176, 0.14);
+  --amber: #8f620c;
+  --amber-soft: rgba(221, 184, 94, 0.32);
+  --danger: #b94537;
+  /* offset "game" shadows: panels, modal (mustard), pressed buttons */
+  --shadow: 3px 4px 0 rgba(43, 36, 29, 0.88);
+  --shadow-modal: 7px 8px 0 var(--mustard);
+  --shadow-btn: 0 3px 0 var(--ink);
+  --shadow-btn-down: 0 1px 0 var(--ink);
+  --focus: #0f7f76;
+  --sky-top: #bfdfe4;
+  --sky-bottom: #f5e9d4;
+  --radius-panel: 12px;
+  --radius-btn: 10px;
   color-scheme: light;
 }
 
 :root[data-theme="dark"] {
-  --bg: #0e1311;
-  --bg-2: #141b18;
-  --surface: rgba(20, 27, 24, 0.84);
-  --surface-solid: #161d1a;
-  --surface-2: rgba(30, 38, 35, 0.9);
-  --text: #e8efea;
-  --muted: #a1ada6;
-  --border: rgba(255, 255, 255, 0.13);
-  --accent: #40c987;
-  --accent-strong: #5fd99d;
-  --accent-contrast: #06140d;
-  --accent-soft: rgba(64, 201, 135, 0.16);
-  --blue: #7aa7ff;
-  --blue-soft: rgba(122, 167, 255, 0.16);
-  --amber: #f0b45b;
-  --amber-soft: rgba(240, 180, 91, 0.16);
-  --danger: #ff8a80;
-  --shadow: 0 12px 34px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
-  --focus: #7aa7ff;
+  --bg: #1d1914;
+  --bg-2: #27211a;
+  --surface: #2b251e;
+  --surface-solid: #2b251e;
+  --surface-2: #352d24;
+  --mint: #1f3a34;
+  --text: #f4e8d3;
+  --muted: #bfae95;
+  --border: rgba(244, 232, 211, 0.16);
+  --ink: #0c0a08;
+  --accent: #2bb3a5;
+  --accent-strong: #3fc9ba;
+  --accent-contrast: #06201d;
+  --accent-soft: rgba(43, 179, 165, 0.18);
+  --mustard: #c9a44c;
+  --brick: #e07a68;
+  --blue: #86b4e8;
+  --blue-soft: rgba(134, 180, 232, 0.16);
+  --amber: #f0c56b;
+  --amber-soft: rgba(201, 164, 76, 0.22);
+  --danger: #ff8f7d;
+  --shadow: 3px 4px 0 rgba(0, 0, 0, 0.75);
+  --shadow-modal: 7px 8px 0 #6f5a29;
+  --shadow-btn: 0 3px 0 var(--ink);
+  --shadow-btn-down: 0 1px 0 var(--ink);
+  --focus: #3fc9ba;
   --sky-top: #0b1830;
   --sky-bottom: #24324a;
   color-scheme: dark;
@@ -57,13 +80,17 @@
   --color-surface: var(--surface);
   --color-surface-solid: var(--surface-solid);
   --color-surface-2: var(--surface-2);
+  --color-mint: var(--mint);
   --color-fg: var(--text);
   --color-muted: var(--muted);
   --color-line: var(--border);
+  --color-ink: var(--ink);
   --color-accent: var(--accent);
   --color-accent-strong: var(--accent-strong);
   --color-on-accent: var(--accent-contrast);
   --color-accent-soft: var(--accent-soft);
+  --color-mustard: var(--mustard);
+  --color-brick: var(--brick);
   --color-blue: var(--blue);
   --color-blue-soft: var(--blue-soft);
   --color-amber: var(--amber);
@@ -86,21 +113,50 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid var(--focus);
+  outline: 3px solid var(--focus);
   outline-offset: 2px;
-  border-radius: 6px;
+  border-radius: 8px;
 }
 
-/* Glass panel used across HUDs. */
+/* HUD panel: cream card, ink outline, offset shadow (no glass blur). */
 .panel {
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 2.5px solid var(--ink);
   box-shadow: var(--shadow);
-  backdrop-filter: blur(14px) saturate(1.2);
-  -webkit-backdrop-filter: blur(14px) saturate(1.2);
-  border-radius: 16px;
+  border-radius: var(--radius-panel);
+}
+/* Large centred dialogs carry the mustard offset shadow. */
+.panel-modal {
+  box-shadow: var(--shadow-modal);
 }
 
+/* Game buttons: ink outline + bottom shadow that compresses when pressed. */
+.btn-game {
+  border: 2px solid var(--ink);
+  box-shadow: var(--shadow-btn);
+  border-radius: var(--radius-btn);
+  transition: transform 90ms ease, box-shadow 90ms ease, background-color 150ms ease;
+}
+.btn-game:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: var(--shadow-btn-down);
+}
+
+/* Small status / category chip. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 999px;
+  border: 1.5px solid var(--ink);
+  padding: 0.05rem 0.5rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.35rem;
+  white-space: nowrap;
+}
+
+/* Key cap (teal square with white letter, as in the walking HUD). */
 .kbd {
   display: inline-flex;
   min-width: 1.6rem;
@@ -108,18 +164,24 @@ body {
   align-items: center;
   justify-content: center;
   padding: 0 0.4rem;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  border-bottom-width: 2px;
-  background: var(--surface-solid);
+  border-radius: 7px;
+  border: 1.5px solid var(--ink);
+  border-bottom-width: 3px;
+  background: var(--accent);
   font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--text);
+  font-weight: 800;
+  color: var(--accent-contrast);
+}
+
+/* Display headings in panels (bold, tight). */
+.title-game {
+  font-weight: 800;
+  letter-spacing: -0.01em;
 }
 
 .scroll-thin {
   scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: var(--muted) transparent;
 }
 
 /* Honour reduced motion from OS or user setting. */

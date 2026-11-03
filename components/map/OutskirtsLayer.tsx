@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { PALETTE } from "@/lib/city/architecture";
 import { buildOutskirts, type OutskirtsData } from "@/lib/city/outskirts";
+import { makeWaterMaterial } from "@/lib/city/waterMaterial";
 
 /**
  * The open ring around the city: roads and water carry on past the edge, a
@@ -16,7 +17,7 @@ export function OutskirtsLayer({ data, quality, dark, shadows }: { data: Outskir
   const mats = useMemo(
     () => ({
       // flat layers: no depth writes, ordered by renderOrder (see CityGround)
-      water: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.2, metalness: 0.15, depthWrite: false }),
+      water: makeWaterMaterial(),
       roads: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, depthWrite: false }),
       walls: new THREE.MeshStandardMaterial({ roughness: 0.85 }),
       roofs: new THREE.MeshStandardMaterial({ roughness: 0.8 }),
@@ -25,7 +26,7 @@ export function OutskirtsLayer({ data, quality, dark, shadows }: { data: Outskir
     [],
   );
   useEffect(() => {
-    const tint = dark ? new THREE.Color("#7f8899") : new THREE.Color("#ffffff");
+    const tint = dark ? new THREE.Color("#a6b0c4") : new THREE.Color("#ffffff");
     for (const m of Object.values(mats)) m.color.copy(tint);
   }, [dark, mats]);
   useEffect(() => () => Object.values(mats).forEach((m) => m.dispose()), [mats]);
